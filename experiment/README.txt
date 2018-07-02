@@ -30,5 +30,8 @@ sweptShutter.py: Does an open-shutter sweep in Z.
 
 zStack.py: Standard Z-stack experiment. 
 
+zStack_remote.py: Z-stack experiment using an adaptive optics device to perform
+  remote focusing rather than mechanically moving the stage. UNDER DEVELOPMENT!!!
+
 zStackMulti.py: Unofficial module for running Z-stacks with multiple different
   exposure times depending on the (hardcoded) criterion.

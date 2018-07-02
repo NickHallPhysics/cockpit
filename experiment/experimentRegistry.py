@@ -9,9 +9,10 @@ from . import structuredIllumination
 from . import stutteredZStack
 from . import sweptShutter
 from . import zStack
+from . import zStack_remote
 
 ## List of registered modules.
-registeredModules = [zStack, sweptShutter,
+registeredModules = [zStack, zStack_remote, sweptShutter,
             offsetGainCorrection, responseMap, stutteredZStack,
             optoScriptExample, structuredIllumination]
 

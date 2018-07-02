@@ -5,11 +5,11 @@ import decimal
 import math
 
 ## Provided so the UI knows what to call this experiment.
-EXPERIMENT_NAME = 'Z-stack'
+EXPERIMENT_NAME = 'Remote Z-stack'
 
 
 ## This class handles classic Z-stack experiments.
-class ZStackExperiment(experiment.Experiment):
+class RemoteZStackExperiment(experiment.Experiment):
     ## Create the ActionTable needed to run the experiment. We simply move to
     # each Z-slice in turn, take an image, then move to the next.
     def generateActions(self):
@@ -64,4 +64,4 @@ class ZStackExperiment(experiment.Experiment):
 
 
 ## A consistent name to use to refer to the class itself.
-EXPERIMENT_CLASS = ZStackExperiment
+EXPERIMENT_CLASS = RemoteZStackExperiment

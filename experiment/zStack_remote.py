@@ -20,8 +20,11 @@ for ii in np.flip(np.sort(LUT_array[:,0])[:],0):
 #a regression of known positions.
 ## ACTUATOR_FITS has key of actuators
 ACTUATOR_FITS = {}
+no_defined_actuators = np.shape(LUT_array)[1]-1
 pos = np.sort(LUT_array[:,0])[:]
-ac_array = np.zeros((np.shape(LUT_array)[0],np.shape(LUT_array)[1]-1))
+ac_array = np.zeros((np.shape(LUT_array)[0],no_defined_actuators))
+
+ac_pos = np.zeros(no_defined_actuators)
 
 count = 0
 for ii in pos:
@@ -29,8 +32,8 @@ for ii in pos:
     count += 1
 
 for ii in range(np.shape(pos)[0]):
-    slope, intercept, r_value, p_value, std_err = stats.linregress(pos, ac_array[:,ii])
-    ACTUATOR_FITS[ii] = (slope, intercept)
+    s, i, r, p, se = stats.linregress(pos, ac_array[:,ii])
+    ACTUATOR_FITS[ii] = (s, i)
 
 ## This class handles classic Z-stack experiments.
 class RemoteZStackExperiment(experiment.Experiment):
@@ -49,6 +52,15 @@ class RemoteZStackExperiment(experiment.Experiment):
             # Move to the next position, then wait for the stage to
             # stabilize.
             zTarget = self.zStart + self.sliceHeight * zIndex
+
+            #Either call or calculate actuator positions for Z position
+            try:
+                ac_pos = LUT[zTarget]
+            except KeyError:
+                for ii in range(no_defined_actuators):
+                    (slope, intercept) = ACTUATOR_FITS[ii]
+                    ac_pos[ii] = (slope * zTarget) + intercept
+
             motionTime, stabilizationTime = 0, 0
             if prevAltitude is not None:
                 motionTime, stabilizationTime = self.zPositioner.getMovementTime(prevAltitude, zTarget)

@@ -3,10 +3,34 @@ from . import experiment
 
 import decimal
 import math
+import numpy as np
+import scipy.stats as stats
 
 ## Provided so the UI knows what to call this experiment.
 EXPERIMENT_NAME = 'Remote Z-stack'
 
+#Create accurate look up table for certain Z positions
+##LUT dict has key of Z positions
+LUT_array = np.loadtxt("remote_focus_LUT.txt")
+LUT = {}
+for ii in np.flip(np.sort(LUT_array[:,0])[:],0):
+    LUT[ii] = LUT_array[np.where(LUT_array == ii)[0][0],1:]
+
+#For Z positions which have not been calibrated, approximate with
+#a regression of known positions.
+## ACTUATOR_FITS has key of actuators
+ACTUATOR_FITS = {}
+pos = np.sort(LUT_array[:,0])[:]
+ac_array = np.zeros((np.shape(LUT_array)[0],np.shape(LUT_array)[1]-1))
+
+count = 0
+for ii in pos:
+    ac_array[count,:] = LUT_array[np.where(LUT_array == ii)[0][0],1:]
+    count += 1
+
+for ii in range(np.shape(pos)[0]):
+    slope, intercept, r_value, p_value, std_err = stats.linregress(pos, ac_array[:,ii])
+    ACTUATOR_FITS[ii] = (slope, intercept)
 
 ## This class handles classic Z-stack experiments.
 class RemoteZStackExperiment(experiment.Experiment):

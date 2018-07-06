@@ -24,6 +24,7 @@ no_defined_actuators = np.shape(LUT_array)[1]-1
 pos = np.sort(LUT_array[:,0])[:]
 ac_array = np.zeros((np.shape(LUT_array)[0],no_defined_actuators))
 
+ac_pos_start = np.zeros(no_defined_actuators)
 ac_pos = np.zeros(no_defined_actuators)
 
 count = 0
@@ -44,6 +45,13 @@ class RemoteZStackExperiment(experiment.Experiment):
         curTime = 0
         prevAltitude = None
         numZSlices = int(math.ceil(self.zHeight / self.sliceHeight))
+        #Either call or calculate actuator positions for Z position
+        try:
+            ac_pos_start = LUT[self.zStart]
+        except KeyError:
+            for ii in range(no_defined_actuators):
+                (slope, intercept) = ACTUATOR_FITS[ii]
+                ac_pos_start[ii] = (slope * self.zStart) + intercept
         if self.zHeight > 1e-6:
             # Non-2D experiment; tack on an extra image to hit the top of
             # the volume.
@@ -65,7 +73,8 @@ class RemoteZStackExperiment(experiment.Experiment):
             if prevAltitude is not None:
                 motionTime, stabilizationTime = self.zPositioner.getMovementTime(prevAltitude, zTarget)
             curTime += motionTime
-            table.addAction(curTime, self.zPositioner, zTarget)
+            #table.addAction(curTime, self.zPositioner, zTarget)
+            table.addAction(curTime, self.dmHandler, ac_pos)
             curTime += stabilizationTime
             prevAltitude = zTarget
 
@@ -76,13 +85,15 @@ class RemoteZStackExperiment(experiment.Experiment):
                 # are strictly ordered.
                 curTime += decimal.Decimal('1e-10')
             # Hold the Z motion flat during the exposure.
-            table.addAction(curTime, self.zPositioner, zTarget)
+            #table.addAction(curTime, self.zPositioner, zTarget)
+            table.addAction(curTime, self.dmHandler, ac_pos)
 
         # Move back to the start so we're ready for the next rep.
         motionTime, stabilizationTime = self.zPositioner.getMovementTime(
                 self.zHeight, 0)
         curTime += motionTime
-        table.addAction(curTime, self.zPositioner, self.zStart)
+        #table.addAction(curTime, self.zPositioner, self.zStart)
+        table.addAction(curTime, self.dmHandler, ac_pos_start)
         # Hold flat for the stabilization time, and any time needed for
         # the cameras to be ready. Only needed if we're doing multiple
         # reps, so we can proceed immediately to the next one.
@@ -92,8 +103,10 @@ class RemoteZStackExperiment(experiment.Experiment):
                 for camera in cameras:
                     cameraReadyTime = max(cameraReadyTime,
                             self.getTimeWhenCameraCanExpose(table, camera))
+        #table.addAction(max(curTime + stabilizationTime, cameraReadyTime),
+        #        self.zPositioner, self.zStart)
         table.addAction(max(curTime + stabilizationTime, cameraReadyTime),
-                self.zPositioner, self.zStart)
+                        self.dmHandler, ac_pos_start)
 
         return table
 

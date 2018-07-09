@@ -24,8 +24,8 @@ no_defined_actuators = np.shape(LUT_array)[1]-1
 pos = np.sort(LUT_array[:,0])[:]
 ac_array = np.zeros((np.shape(LUT_array)[0],no_defined_actuators))
 
-ac_pos_start = np.zeros(no_defined_actuators)
-ac_pos = np.zeros(no_defined_actuators)
+#ac_pos_start = np.zeros(no_defined_actuators)
+#ac_pos = np.zeros(no_defined_actuators)
 
 count = 0
 for ii in pos:
@@ -49,9 +49,11 @@ class RemoteZStackExperiment(experiment.Experiment):
         try:
             ac_pos_start = LUT[self.zStart]
         except KeyError:
+            ac_pos_start_dbl = []
             for ii in range(no_defined_actuators):
                 (slope, intercept) = ACTUATOR_FITS[ii]
-                ac_pos_start[ii] = (slope * self.zStart) + intercept
+                ac_pos_start_dbl.append((slope * self.zStart) + intercept)
+            ac_pos_start = np.asarray(ac_pos_start_dbl)
         if self.zHeight > 1e-6:
             # Non-2D experiment; tack on an extra image to hit the top of
             # the volume.
@@ -63,11 +65,13 @@ class RemoteZStackExperiment(experiment.Experiment):
 
             #Either call or calculate actuator positions for Z position
             try:
-                ac_pos = LUT[zTarget]
+                ac_pos_dbl = LUT[zTarget]
             except KeyError:
+                ac_pos_dbl = []
                 for ii in range(no_defined_actuators):
                     (slope, intercept) = ACTUATOR_FITS[ii]
-                    ac_pos[ii] = (slope * zTarget) + intercept
+                    ac_pos_dbl.append((slope * self.zStart) + intercept)
+                ac_pos = np.asarray(ac_pos_dbl)
 
             motionTime, stabilizationTime = 0, 0
             if prevAltitude is not None:

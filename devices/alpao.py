@@ -23,9 +23,20 @@ import gui.toggleButton
 import Pyro4
 import Tkinter as tk
 from PIL import Image, ImageTk
-import numpy as np
-import matplotlib.pyplot as plt
 import util.userConfig as Config
+
+import numpy as np
+import scipy.stats as stats
+
+#Create accurate look up table for certain Z positions
+##LUT dict has key of Z positions
+try:
+    LUT_array = np.loadtxt("remote_focus_LUT.txt")
+    LUT = {}
+    for ii in (LUT_array[:,0])[:]:
+        LUT[ii] = LUT_array[np.where(LUT_array == ii)[0][0],1:]
+except:
+    pass
 
 #the AO device subclasses Device to provide compatibility with microscope.
 class Alpao(device.Device):
@@ -54,6 +65,28 @@ class Alpao(device.Device):
         #subscribe to enable camera event to get access the new image queue
         events.subscribe('camera enable',
                 lambda c, isOn: self.enablecamera( c, isOn))
+
+    def remote_ac_fits(self):
+        #For Z positions which have not been calibrated, approximate with
+        #a regression of known positions.
+        ## ACTUATOR_FITS has key of actuators
+        self.no_actuators = self.AlpaoConnection.get_n_actuators()
+        self.actuator_slopes = np.zeros(self.no_actuators)
+        self.actuator_intercepts = np.zeros(self.no_actuators)
+
+        pos = np.sort(LUT_array[:,0])[:]
+        ac_array = np.zeros((np.shape(LUT_array)[0],self.no_actuators))
+
+        count = 0
+        for jj in pos:
+            ac_array[count,:] = LUT_array[np.where(LUT_array == jj)[0][0],1:]
+            count += 1
+
+        for kk in range(self.no_actuators):
+            s, i, r, p, se = stats.linregress(pos, ac_array[:,kk])
+            self.actuator_slopes[kk] = s
+            self.actuator_intercepts[kk] = i
+
     @util.threads.callInNewThread
     def listenthread(self):
         while 1:

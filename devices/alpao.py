@@ -16,6 +16,7 @@ import interfaces.imager
 import socket
 import util
 import time
+from itertools import groupby
 import struct
 import gui.device
 import gui.guiUtils
@@ -24,6 +25,7 @@ import Pyro4
 import Tkinter as tk
 from PIL import Image, ImageTk
 import util.userConfig as Config
+import handlers.executor
 
 import numpy as np
 import scipy.stats as stats
@@ -69,11 +71,6 @@ class Alpao(device.Device):
     def remote_ac_fits(self):
         #For Z positions which have not been calibrated, approximate with
         #a regression of known positions.
-        ## ACTUATOR_FITS has key of actuators
-        self.no_actuators = self.AlpaoConnection.get_n_actuators()
-        self.actuator_slopes = np.zeros(self.no_actuators)
-        self.actuator_intercepts = np.zeros(self.no_actuators)
-
         pos = np.sort(LUT_array[:,0])[:]
         ac_array = np.zeros((np.shape(LUT_array)[0],self.no_actuators))
 
@@ -86,6 +83,7 @@ class Alpao(device.Device):
             s, i, r, p, se = stats.linregress(pos, ac_array[:,kk])
             self.actuator_slopes[kk] = s
             self.actuator_intercepts[kk] = i
+        return
 
     @util.threads.callInNewThread
     def listenthread(self):
@@ -155,6 +153,103 @@ class Alpao(device.Device):
 
     def onCameraEnable(self, camera, isOn):
         self.curCamera = camera
+
+    def examineActions(self, table):
+        # Extract pattern parameters from the table.
+        # patternParms is a list of tuples (angle, phase, wavelength)
+        patternParams = [row[2] for row in table if row[1] is self.handler]
+        if not patternParams:
+            # DM is not used in this experiment.
+            return
+
+        # Remove consecutive duplicates and position resets.
+        reducedParams = [p[0] for p in groupby(patternParams)
+                          if type(p[0]) is float]
+        # Find the repeating unit in the sequence.
+        sequenceLength = len(reducedParams)
+        for length in range(2, len(reducedParams) // 2):
+            if reducedParams[0:length] == reducedParams[length:2*length]:
+                sequenceLength = length
+                break
+        sequence = reducedParams[0:sequenceLength]
+        ## Tell the DM to prepare the pattern sequence.
+        asyncResult = self.AlpaoConnection.mirror.queue_patterns(sequence)
+
+        # Track sequence index set by last set of triggers.
+        lastIndex = 0
+        for i, (t, handler, action) in enumerate(table.actions):
+            if handler is not self.handler:
+                # Nothing to do
+                continue
+            elif action in [True, False]:
+                # Trigger action generated on earlier pass through.
+                continue
+            # Action specifies a target frame in the sequence.
+            # Remove original event.
+            table[i] = None
+            # How many triggers?
+            if type(action) is tuple and action != sequence[lastIndex]:
+                # Next pattern does not match last, so step one pattern.
+                    numTriggers = 1
+            elif type(action) is int:
+                if action >= lastIndex:
+                    numTriggers = action - lastIndex
+                else:
+                    numTriggers = sequenceLength - lastIndex - action
+            else:
+                numTriggers = 0
+
+            """
+            Used to calculate time to execute triggers and settle here, 
+            then push back all later events, but that leads to very long
+            delays before the experiment starts. For now, comment out
+            this code, and rely on a fixed time passed back to the action
+            table generator (i.e. experiment class).
+
+            # How long will the triggers take?
+            # Time between triggers must be > table.toggleTime.
+            dt = self.settlingTime + 2 * numTriggers * table.toggleTime
+            ## Shift later table entries to allow for triggers and settling.
+            table.shiftActionsBack(time, dt)
+            for trig in range(numTriggers):
+                t = table.addToggle(t, triggerHandler)
+                t += table.toggleTime
+            """
+            for trig in range(numTriggers):
+                t = table.addToggle(t, self.handler)
+                t += table.toggleTime
+
+            lastIndex += numTriggers
+            if lastIndex >= sequenceLength:
+                lastIndex = lastIndex % sequenceLength
+        table.clearBadEntries()
+        # Wait until SLM has finished generating and loading patterns.
+        self.wait(asyncResult, "SLM is generating pattern sequence.")
+        # Store the parameters used to generate the sequence.
+        self.lastParms = sequence
+        self.connection.run()
+        # Fire several triggers to ensure that the sequence is loaded.
+        for i in range(12):
+            self.handler.triggerNow()
+            time.sleep(0.01)
+        # Ensure that we're at position 0.
+        self.position = self.getCurrentPosition()
+        while self.position != 0:
+            self.handler.triggerNow()
+            time.sleep(0.01)
+            self.position = self.getCurrentPosition()
+
+
+    def getHandlers(self):
+        trigsource = self.config.get('triggersource', None)
+        trigline = self.config.get('triggerline', None)
+        dt = self.config.get('settlingtime', 10)
+        result = []
+        self.handler = handlers.executor.DelegateTrigger("dm", "dm group",
+                                              trigsource, trigline,
+                                              self.examineActions, dt)
+        result.append(self.handler)
+        return result
 
     ### UI functions ###
     def makeUI(self, parent):

@@ -30,16 +30,6 @@ import handlers.executor
 import numpy as np
 import scipy.stats as stats
 
-#Create accurate look up table for certain Z positions
-##LUT dict has key of Z positions
-try:
-    LUT_array = np.loadtxt("remote_focus_LUT.txt")
-    LUT = {}
-    for ii in (LUT_array[:,0])[:]:
-        LUT[ii] = LUT_array[np.where(LUT_array == ii)[0][0],1:]
-except:
-    pass
-
 #the AO device subclasses Device to provide compatibility with microscope.
 class Alpao(device.Device):
     def __init__(self, name, config={}):
@@ -72,22 +62,43 @@ class Alpao(device.Device):
         self.actuator_slopes = np.zeros(self.no_actuators)
         self.actuator_intercepts = np.zeros(self.no_actuators)
 
-    def remote_ac_fits(self):
+        #Create accurate look up table for certain Z positions
+        ##LUT dict has key of Z positions
+        try:
+            LUT_array = np.loadtxt("remote_focus_LUT.txt")
+            self.LUT = {}
+            for ii in (LUT_array[:,0])[:]:
+                self.LUT[ii] = LUT_array[np.where(LUT_array == ii)[0][0],1:]
+        except:
+            self.LUT == None
+
+        ##slopes and intercepts are used for extrapolating values not
+        ##found in the LUT dict
+        if self.LUT is not None:
+            self.actuator_slopes, self.actuator_intercepts = \
+                self.remote_ac_fits(LUT_array, self.no_actuators)
+
+
+    def remote_ac_fits(self,LUT_array, no_actuators):
         #For Z positions which have not been calibrated, approximate with
         #a regression of known positions.
+
+        actuator_slopes = np.zeros(no_actuators)
+        actuator_intercepts = np.zeros(no_actuators)
+
         pos = np.sort(LUT_array[:,0])[:]
-        ac_array = np.zeros((np.shape(LUT_array)[0],self.no_actuators))
+        ac_array = np.zeros((np.shape(LUT_array)[0],no_actuators))
 
         count = 0
         for jj in pos:
             ac_array[count,:] = LUT_array[np.where(LUT_array == jj)[0][0],1:]
             count += 1
 
-        for kk in range(self.no_actuators):
+        for kk in range(no_actuators):
             s, i, r, p, se = stats.linregress(pos, ac_array[:,kk])
-            self.actuator_slopes[kk] = s
-            self.actuator_intercepts[kk] = i
-        return
+            actuator_slopes[kk] = s
+            actuator_intercepts[kk] = i
+        return actuator_slopes, actuator_intercepts
 
     @util.threads.callInNewThread
     def listenthread(self):
@@ -176,8 +187,10 @@ class Alpao(device.Device):
                 sequenceLength = length
                 break
         sequence = reducedParams[0:sequenceLength]
+        ac_positions = np.outer(sequence, self.actuator_slopes.T) \
+                       + self.actuator_intercepts
         ## Tell the DM to prepare the pattern sequence.
-        asyncResult = self.AlpaoConnection.mirror.queue_patterns(sequence)
+        asyncResult = self.AlpaoConnection.mirror.queue_patterns(ac_positions)
 
         # Track sequence index set by last set of triggers.
         lastIndex = 0

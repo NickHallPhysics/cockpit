@@ -68,6 +68,10 @@ class Alpao(device.Device):
         events.subscribe('camera enable',
                 lambda c, isOn: self.enablecamera( c, isOn))
 
+        self.no_actuators = self.AlpaoConnection.get_n_actuators()
+        self.actuator_slopes = np.zeros(self.no_actuators)
+        self.actuator_intercepts = np.zeros(self.no_actuators)
+
     def remote_ac_fits(self):
         #For Z positions which have not been calibrated, approximate with
         #a regression of known positions.

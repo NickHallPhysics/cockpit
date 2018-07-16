@@ -70,7 +70,7 @@ class Alpao(device.Device):
             for ii in (LUT_array[:,0])[:]:
                 self.LUT[ii] = LUT_array[np.where(LUT_array == ii)[0][0],1:]
         except:
-            self.LUT == None
+            self.LUT = None
 
         ##slopes and intercepts are used for extrapolating values not
         ##found in the LUT dict
@@ -190,7 +190,7 @@ class Alpao(device.Device):
         ac_positions = np.outer(sequence, self.actuator_slopes.T) \
                        + self.actuator_intercepts
         ## Tell the DM to prepare the pattern sequence.
-        asyncResult = self.AlpaoConnection.mirror.queue_patterns(ac_positions)
+        asyncResult = self.AlpaoConnection.queue_patterns(ac_positions)
 
         # Track sequence index set by last set of triggers.
         lastIndex = 0
@@ -241,20 +241,20 @@ class Alpao(device.Device):
                 lastIndex = lastIndex % sequenceLength
         table.clearBadEntries()
         # Wait until SLM has finished generating and loading patterns.
-        self.wait(asyncResult, "SLM is generating pattern sequence.")
+        #self.wait(asyncResult, "DM is generating pattern sequence.")
         # Store the parameters used to generate the sequence.
         self.lastParms = sequence
-        self.connection.run()
+        #self.connection.run()
         # Fire several triggers to ensure that the sequence is loaded.
         for i in range(12):
             self.handler.triggerNow()
             time.sleep(0.01)
         # Ensure that we're at position 0.
-        self.position = self.getCurrentPosition()
-        while self.position != 0:
-            self.handler.triggerNow()
-            time.sleep(0.01)
-            self.position = self.getCurrentPosition()
+        #self.position = self.getCurrentPosition()
+        #while self.position != 0:
+        #    self.handler.triggerNow()
+        #    time.sleep(0.01)
+        #    self.position = self.getCurrentPosition()
 
 
     def getHandlers(self):

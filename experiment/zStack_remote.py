@@ -3,6 +3,7 @@ from . import experiment
 
 import decimal
 import math
+import depot
 
 ## Provided so the UI knows what to call this experiment.
 EXPERIMENT_NAME = 'Remote Z-stack'
@@ -10,7 +11,10 @@ EXPERIMENT_NAME = 'Remote Z-stack'
 ## This class handles classic Z-stack experiments.
 class RemoteZStackExperiment(experiment.Experiment):
 
-    def __init__(self, dmHandler = None):
+    def __init__(self, dmHandler = None, *args, **kwargs):
+        experiment.Experiment.__init__(self, *args, **kwargs)
+
+        dmHandler = depot.getHandlerWithName('dm')
         self.dmHandler = dmHandler
 
     ## Create the ActionTable needed to run the experiment. We simply move to

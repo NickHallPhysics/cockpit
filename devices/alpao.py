@@ -451,7 +451,7 @@ class Alpao(device.Device):
                 self.AlpaoConnection.set_controlMatrix(self.controlMatrix)
             except:
                 raise e
-        flat_values = self.AlpaoConnection.flatten_phase(iterations=10)
+        flat_values = self.AlpaoConnection.flatten_phase(iterations=5)
         Config.setValue('alpao_flat_values', np.ndarray.tolist(flat_values), isGlobal=True)
 
 

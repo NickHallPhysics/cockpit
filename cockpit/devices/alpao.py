@@ -638,7 +638,7 @@ class Canvas(tk.Canvas):
 
     def on_click(self, event):
         if self.circle == None:
-            self.circle = self.create_oval((event.x-1, event.y-1, event.x+1, event.y+1))
+            self.circle = self.create_rectangle((event.x-1, event.y-1, event.x+1, event.y+1))
             self.centre[0] = (event.x - self.offset[0]) * self.ratio
             self.centre[1] = (event.y - self.offset[1]) * self.ratio
             self.radius = ((event.x+1 - event.x+1 + 1) * self.ratio)/2

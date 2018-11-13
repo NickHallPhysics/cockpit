@@ -38,8 +38,7 @@ class RemoteZStackExperiment(experiment.Experiment):
 
             motionTime, stabilizationTime = 0, 0
             if prevAltitude is not None:
-                if self.dmHandler is not None:
-                    motionTime, stabilizationTime = self.dmHandler.getMovementTime(prevAltitude, zTarget)
+                motionTime, stabilizationTime = self.zPositioner.getMovementTime(prevAltitude, zTarget)
             curTime += motionTime
             #table.addAction(curTime, self.zPositioner, zTarget)
             if self.dmHandler is not None:

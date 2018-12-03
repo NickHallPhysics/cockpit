@@ -658,9 +658,9 @@ class Alpao(device.Device):
             coef_curr_ab, ac_pos_curr_ab = self.proxy.correct_sensorless_single_mode(
                                             image_stack = np.asarray(self.correction_stack)[start_slice:end_slice,:,:],
                                             zernike_applied = self.zernike_applied[start_slice:end_slice,:],
-                                            nollIndex = noll_ind_ref,
+                                            nollIndex = self.nollZernike[noll_ind_ref-1],
                                             offset = self.ac_pos_sensorless_correct)
-            self.sensorless_correct_coef[noll_ind_ref - 1] += coef_curr_ab
+            self.sensorless_correct_coef[self.nollZernike[noll_ind_ref-1]-1] += coef_curr_ab
             self.ac_pos_sensorless_correct = ac_pos_curr_ab
 
             if len(self.correction_stack) < self.zernike_applied.shape[0]:

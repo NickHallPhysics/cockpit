@@ -592,7 +592,10 @@ class Alpao(device.Device):
                 raise e
 
         if np.any(nollZernike) == None:
-            self.nollZernike = np.array([5, 6, 7, 8, 9, 10, 11, 22])
+            # Deal with primary spherical first, as this is deals with refractive index mismatch
+            # Then deal with usual biggest aberrations; coma, astigmatism and trefoil
+            # Finally, sweep through all low order aberrations as well as 2nd & 3rd order spherical
+            self.nollZernike = np.array([11, 5, 6, 7, 8, 9, 10, 4, 5, 6, 7, 8, 9, 10, 11, 22, 37])
         else:
             self.nollZernike = nollZernike
 
@@ -603,19 +606,27 @@ class Alpao(device.Device):
         self.objectives = cockpit.depot.getHandlersOfType(cockpit.depot.OBJECTIVE)[0]
         self.pixelSize = self.objectives.getPixelSize()
         self.proxy.set_sensorless_ring_mask(size = self.curCamera.getImageSize(), pixel_size = self.pixelSize)
+        self.sensorless_correct_coef = np.zeros(self.no_actuators)
+        self.ac_pos_sensorless_correct = np.zeros(self.no_actuators) + 0.5
 
         #Initialise the Zernike modes to apply
-        z_steps = np.linspace(-3,3,4)
-        self.zernike_applied = np.zeros((z_steps.shape[0]*self.nollZernike.shape[0],self.no_actuators))
-        for noll_ind in self.nollZernike:
-            ind = np.where(self.nollZernike == noll_ind)[0][0]
+        self.num_z_steps = 6
+        self.zernike_applied = np.zeros((self.num_z_steps*self.nollZernike.shape[0],self.no_actuators))
+        for ind in range(self.nollZernike.shape[0]):
+            if ind == 0: #Set z_steps used for primary spherical
+                z_steps = np.linspace(-1.25, 1.25, self.num_z_steps)
+            elif ind < 7 and ind is not 0: #Set z_steps used for coma, astigmatism & trefoil
+                z_steps = np.linspace(-0.75, 0.75, self.num_z_steps)
+            else: #Set z_steps for all other aberrations
+                z_steps = np.linspace(-0.25, 0.25, self.num_z_steps)
+            noll_ind = self.nollZernike[ind]
             self.zernike_applied[ind * z_steps.shape[0]:(ind + 1) * z_steps.shape[0], noll_ind - 1] = z_steps
 
         #Initialise stack to store correction iumages
         self.correction_stack = []
 
         # Apply the first Zernike mode
-        self.proxy.set_phase(self.zernike_applied[len(self.correction_stack), :])
+        self.proxy.set_phase(self.zernike_applied[len(self.correction_stack), :], offset=self.ac_pos_sensorless_correct)
 
         # Take image. This will trigger the iterative sensorless AO correction
         wx.CallAfter(self.takeImage)
@@ -633,25 +644,40 @@ class Alpao(device.Device):
 
     def correctSensorlessProcessing(self):
         print("Processing sensorless image")
-        if len(self.correction_stack) < self.zernike_applied.shape[0]:
-            #Advance counter by 1 and apply next phase
-            self.proxy.set_phase(self.zernike_applied[len(self.correction_stack), :])
+        if len(self.correction_stack)%self.num_z_steps is not 0:
+            # Advance counter by 1 and apply next phase
+            self.proxy.set_phase(self.zernike_applied[len(self.correction_stack), :], offset=self.ac_pos_sensorless_correct)
 
-            #Take image, but ensure it's called after the phase is applied
+            # Take image, but ensure it's called after the phase is applied
             wx.CallAfter(self.takeImage)
         else:
-            #Once all images have been obtained, unsubscribe
-            events.unsubscribe("new image %s" % self.curCamera.name, self.correctSensorlessImage)
+            noll_ind_ref = len(self.correction_stack)/self.num_z_steps
+            start_slice = (noll_ind_ref-1)*self.num_z_steps
+            end_slice = noll_ind_ref * self.num_z_steps
 
-            #Save full stack of images used
-            self.correction_stack = np.asarray(self.correction_stack)
-            np.save("C:\\cockpit\\nick\\cockpit\\sensorless_AO_correction_stack", self.correction_stack)
+            coef_curr_ab, ac_pos_curr_ab = self.proxy.correct_sensorless_single_mode(
+                                            image_stack = np.asarray(self.correction_stack)[start_slice:end_slice,:,:],
+                                            zernike_applied = self.zernike_applied[start_slice:end_slice,:],
+                                            nollIndex = noll_ind_ref,
+                                            offset = self.ac_pos_sensorless_correct)
+            self.sensorless_correct_coef[noll_ind_ref - 1] += coef_curr_ab
+            self.ac_pos_sensorless_correct = ac_pos_curr_ab
 
-            #Find aberration amplitudes and correct
-            sensorless_correct_coef = self.proxy.get_zernike_modes_sensorless(self.correction_stack,
-                                                                              self.zernike_applied, self.nollZernike)
-            np.save("C:\\cockpit\\nick\\cockpit\\sensorless_correct_coef", sensorless_correct_coef)
-            self.proxy.send(sensorless_correct_coef)
+            if len(self.correction_stack) < self.zernike_applied.shape[0]:
+                #Advance counter by 1 and apply next phase
+                self.proxy.set_phase(self.zernike_applied[len(self.correction_stack), :], offset=self.ac_pos_sensorless_correct)
+
+                #Take image, but ensure it's called after the phase is applied
+                wx.CallAfter(self.takeImage)
+            else:
+                #Once all images have been obtained, unsubscribe
+                events.unsubscribe("new image %s" % self.curCamera.name, self.correctSensorlessImage)
+
+                #Save full stack of images used, amplitudes measured and actuator positions applied
+                self.correction_stack = np.asarray(self.correction_stack)
+                np.save("C:\\cockpit\\nick\\cockpit\\sensorless_AO_correction_stack", self.correction_stack)
+                np.save("C:\\cockpit\\nick\\cockpit\\ac_pos_sensorless_correct", self.ac_pos_sensorless_correct)
+                np.save("C:\\cockpit\\nick\\cockpit\\sensorless_correct_coef", self.sensorless_correct_coef)
 
 ## This debugging window lets each digital lineout of the DSP be manipulated
 # individually.

@@ -65,11 +65,12 @@ from . import si2d
 from . import rotatorSweep
 from . import zStack_remote
 from . import remote_focus_calibration
+from . import SIMFlux
 
 ## List of registered modules.
 registeredModules = [zStack, remote_focus_calibration, zStack_remote, sweptShutter,
             offsetGainCorrection, responseMap, stutteredZStack,
-            optoScriptExample, structuredIllumination,
+            optoScriptExample, structuredIllumination, SIMFlux,
                      si2d, rotatorSweep]
 
 

@@ -70,7 +70,7 @@ import shutil
 import wx
 
 ## Provided so the UI knows what to call this experiment.
-EXPERIMENT_NAME = 'Structured Illumination'
+EXPERIMENT_NAME = 'SIM Flux'
 
 ## Maps possible collection orders to their ordering (0: angle, 1: phase, 2: z).
 COLLECTION_ORDERS = {
@@ -159,7 +159,7 @@ def reorder_z_dim(data, order_packed, z_lengths, z_order, z_wanted):
 
 
 ## This class handles SI experiments.
-class SIExperiment(experiment.Experiment):
+class SIMFluxExperiment(experiment.Experiment):
     ## \param numAngles How many angles to perform -- sometimes we only want
     # to do 1 angle, for example.
     # \param collectionOrder Key from COLLECTION_ORDERS that indicates what
@@ -500,7 +500,7 @@ class SIExperiment(experiment.Experiment):
 
 
 ## A consistent name to use to refer to the class itself.
-EXPERIMENT_CLASS = SIExperiment
+EXPERIMENT_CLASS = SIMFluxExperiment
 
 
 ## Generate the UI for special parameters used by this experiment.
@@ -513,6 +513,20 @@ class ExperimentUI(wx.Panel):
         self.settings = self.loadSettings()
 
         sizer = wx.BoxSizer(wx.VERTICAL)
+        rowSizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.numPhases = guiUtils.addLabeledInput(self,
+                                                          rowSizer, label="Number of phases",
+                                                          helperString="How many phases do you want?")
+        self.numPhases.SetValue(str(self.settings['numPhases']))
+        sizer.Add(rowSizer)
+
+        rowSizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.numAngles = guiUtils.addLabeledInput(self,
+                                                  rowSizer, label="Number of angles",
+                                                  helperString="How many angles do you want?")
+        self.numAngles.SetValue(str(self.settings['numAngles']))
+        sizer.Add(rowSizer)
+
         rowSizer = wx.BoxSizer(wx.HORIZONTAL)
         self.shouldOnlyDoOneAngle = wx.CheckBox(self,
                 label = "Do only one angle")
@@ -544,8 +558,8 @@ class ExperimentUI(wx.Panel):
     # experiment instance, augment them with our special parameters.
     def augmentParams(self, params):
         self.saveSettings()
-        params['numAngles'] = 2
-        params['numPhases'] = 50
+        params['numAngles'] = int(self.numAngles.GetValue())
+        params['numPhases'] = int(self.numPhases.GetValue())
         if self.shouldOnlyDoOneAngle.GetValue():
             params['numAngles'] = 1
         params['collectionOrder'] = self.siCollectionOrder.GetStringSelection()
@@ -569,8 +583,10 @@ class ExperimentUI(wx.Panel):
     def loadSettings(self):
         allLights = depot.getHandlersOfType(depot.LIGHT_TOGGLE)
         result = cockpit.util.userConfig.getValue(
-                self.configKey + 'SIExperimentSettings',
+                self.configKey + 'SIMFluxExperimentSettings',
                 default = {
+                    'numAngles': 2,
+                    'numPhases': 50,
                     'bleachCompensations': ['' for l in self.allLights],
                     'shouldOnlyDoOneAngle': False,
                     'siCollectionOrder': 0,
@@ -585,6 +601,8 @@ class ExperimentUI(wx.Panel):
     ## Generate a dict of our settings.
     def getSettingsDict(self):
         return {
+                'numAngles': self.numAngles.GetValue(),
+                'numPhases': self.numPhases.GetValue(),
                 'bleachCompensations': [c.GetValue() for c in self.bleachCompensations],
                 'shouldOnlyDoOneAngle': self.shouldOnlyDoOneAngle.GetValue(),
                 'siCollectionOrder': self.siCollectionOrder.GetSelection(),
@@ -596,5 +614,5 @@ class ExperimentUI(wx.Panel):
         if settings is None:
             settings = self.getSettingsDict()
         cockpit.util.userConfig.setValue(
-                self.configKey + 'SIExperimentSettings', settings
+                self.configKey + 'SIMFluxExperimentSettings', settings
         )

@@ -62,6 +62,7 @@ from . import stutteredZStack
 from . import sweptShutter
 from . import zStack
 from . import si2d
+from . import SIMFlux2D
 from . import rotatorSweep
 from . import zStack_remote
 from . import remote_focus_calibration
@@ -71,7 +72,7 @@ from . import SIMFlux
 registeredModules = [zStack, remote_focus_calibration, zStack_remote, sweptShutter,
             offsetGainCorrection, responseMap, stutteredZStack,
             optoScriptExample, structuredIllumination, SIMFlux,
-                     si2d, rotatorSweep]
+                     SIMFlux2D, si2d, rotatorSweep]
 
 
 ## Add another experiment to the registered set.

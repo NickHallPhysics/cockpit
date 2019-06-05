@@ -4,6 +4,7 @@
 ## Copyright (C) 2018-19 Mick Phillips <mick.phillips@gmail.com>
 ## Copyright (C) 2018 Ian Dobbie <ian.dobbie@bioch.ox.ac.uk>
 ## Copyright (C) 2018 David Pinto <david.pinto@bioch.ox.ac.uk>
+## Copyright (C) 2019 Nicholas Hall <nicholas.hall@dtc.ox.ac.uk>
 ##
 ## This file is part of Cockpit.
 ##
@@ -265,14 +266,11 @@ class Image(BaseGL):
             self._createTextures()
         shader = self.getShader()
         glUseProgram(shader)
-        # Vertical and horizontal modifiers for non-square images.
-        hlim = self._data.shape[1] / max(self._data.shape)
-        vlim = self._data.shape[0] / max(self._data.shape)
-        # Number of x and y textures.
         nx, ny = self.shape
-        # Quad dimensions for one texture.
-        dx = 2 * hlim / nx
-        dy = 2 * vlim / ny
+        dx = 2 / nx
+        dy = 2 / ny
+        xcorr = ycorr = 0
+        zoomcorr = 1
         if len(self._textures) > 1:
             tx = ty = self._maxTexEdge
             # xy & zoom correction for incompletely-filled textures at upper & right edges.
@@ -306,13 +304,10 @@ class Image(BaseGL):
                     ii = self._data.shape[1] / self._maxTexEdge
                 else:
                     ii = i+1
-                # Arrays used to create textures have top left at [0,0].
-                # GL co-ords run *bottom* left to top right, so need to invert
-                # vertical co-ords.
-                glVertexPointerf( [(-hlim + i*dx, -vlim + jj*dy),
-                                   (-hlim + ii*dx, -vlim + jj*dy),
-                                   (-hlim + ii*dx, -vlim + j*dy),
-                                   (-hlim + i*dx, -vlim + j*dy)] )
+                glVertexPointerf( [(-1 + i*dx, -1 + j*dy),
+                                   (-1 + ii*dx, -1 + j*dy),
+                                   (-1 + ii*dx, -1 + jj*dy),
+                                   (-1 + i*dx, -1 + jj*dy)] )
                 glTexCoordPointer(2, GL_FLOAT, 0,
                                   [(0, 0), (ii%1 or 1, 0), (ii%1 or 1, jj%1 or 1), (0, jj%1 or 1)])
                 glBindTexture(GL_TEXTURE_2D, self._textures[j*nx + i])
@@ -420,6 +415,9 @@ class ViewCanvas(wx.glcanvas.GLCanvas):
 
         ## Should we show a crosshair (used for alignment)?
         self.showCrosshair = False
+        self.showAligCentroid = False
+        self.showCurCentroid = False
+        self.aligCentroidCalculated = False
 
         ## Queue of incoming images that we need to either display or discard.
         self.imageQueue = queue.Queue()
@@ -472,7 +470,12 @@ class ViewCanvas(wx.glcanvas.GLCanvas):
         self.Bind(wx.EVT_CONTEXT_MENU, lambda event: None)
         self.painting = False
 
-
+        self.y_alig_cent = None
+        self.x_alig_cent = None
+        self.y_cur_cent = None
+        self.x_cur_cent = None
+        self.diff_y = None
+        self.diff_x = None
 
     def onMouseWheel(self, event):
         # Only respond if event originated within window.
@@ -570,7 +573,6 @@ class ViewCanvas(wx.glcanvas.GLCanvas):
             self.drawEvent.wait()
             self.drawEvent.clear()
 
-
     ## Return the blackpoint and whitepoint (i.e. the pixel values which
     # are displayed as black and white, respectively).
     def getScaling(self):
@@ -631,12 +633,21 @@ class ViewCanvas(wx.glcanvas.GLCanvas):
             glLoadIdentity ()
             glOrtho (0, self.w, 0, self.h, 1., -1.)
             glTranslatef(0, HISTOGRAM_HEIGHT/2+2, 0)
-            try:
-                self.font.render('%d [%-10d %10d] %d' %
-                                 (self.image.dmin, self.histogram.lthresh,
-                                  self.histogram.uthresh, self.image.dmin+self.image.dptp))
-            except:
-                pass
+            if self.showCurCentroid:
+                try:
+                    self.font.render('%d [%-10d %10d] %d    X diff = %.5f, Y diff = %.5f' %
+                                     (self.image.dmin, self.histogram.lthresh,
+                                      self.histogram.uthresh, self.image.dmin + self.image.dptp,
+                                      self.diff_x, self.diff_y))
+                except:
+                    pass
+            else:
+                try:
+                    self.font.render('%d [%-10d %10d] %d' %
+                                     (self.image.dmin, self.histogram.lthresh,
+                                      self.histogram.uthresh, self.image.dmin + self.image.dptp))
+                except:
+                    pass
             glPopMatrix()
 
             #self.drawHistogram()
@@ -653,7 +664,7 @@ class ViewCanvas(wx.glcanvas.GLCanvas):
 
 
     @cockpit.util.threads.callInMainThread
-    def drawCrosshair(self):
+    def drawCrosshair(self, ):
         glColor3f(0, 255, 255)
         glVertexPointerf([(-1, self.zoom*self.panY), (1, self.zoom*self.panY),
                           (self.zoom*self.panX, -1), (self.zoom*self.panX, 1)])
@@ -675,7 +686,6 @@ class ViewCanvas(wx.glcanvas.GLCanvas):
         if self.imageData is not None:
             self.w, self.h = size
         self.Refresh(0)
-
 
     def onMouse(self, event):
         if self.imageShape is None:
@@ -739,8 +749,9 @@ class ViewCanvas(wx.glcanvas.GLCanvas):
     def getMenuActions(self):
         return [('Reset view', self.resetView),
                 ('Set histogram parameters', self.onSetHistogram),
-                ('Toggle alignment crosshair', self.toggleCrosshair)]
-
+                ('Toggle alignment crosshair', self.toggleCrosshair),
+                ('Toggle show aligment centroid', self.toggleAligCentroid),
+                ('Toggle show current centroid', self.toggleCurCentroid)]
 
     ## Let the user specify the blackpoint and whitepoint for image scaling.
     def onSetHistogram(self, event = None):

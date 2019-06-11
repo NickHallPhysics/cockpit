@@ -833,6 +833,8 @@ class TouchScreenWindow(wx.Frame, mosaic.MosaicCommon):
             cockpit.gui.guiUtils.placeMenuAtMouse(self.panel, menu)
 
 
+
+
     def textInfoField(self,title,onText,onColour,offText,offColour):
         textSizer=wx.BoxSizer(wx.VERTICAL)
 

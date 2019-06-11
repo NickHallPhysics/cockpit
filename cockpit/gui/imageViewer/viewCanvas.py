@@ -670,17 +670,6 @@ class ViewCanvas(wx.glcanvas.GLCanvas):
                           (self.zoom*self.panX, -1), (self.zoom*self.panX, 1)])
         glDrawArrays(GL_LINES, 0, 4)
 
-    @cockpit.util.threads.callInMainThread
-    def drawCentroidCross(self, y_cent, x_cent, colour):
-        if x_cent == None or y_cent == None:
-            return
-        glColor3f(colour[0], colour[1], colour[2])
-        glVertexPointerf([((x_cent - 0.1 + (self.zoom*self.panX)), y_cent + (self.zoom*self.panY)),
-                          ((x_cent + 0.1 + (self.zoom*self.panX)), y_cent + (self.zoom*self.panY)),
-                          (x_cent + (self.zoom*self.panX), (y_cent - 0.1 + (self.zoom*self.panY))),
-                          (x_cent + (self.zoom*self.panX), (y_cent + 0.1 + (self.zoom*self.panY)))])
-        glDrawArrays(GL_LINES, 0, 4)
-
     ## Update the size of the canvas by scaling it.
     def setSize(self, size):
         if self.imageData is not None:
@@ -770,37 +759,10 @@ class ViewCanvas(wx.glcanvas.GLCanvas):
 
     def toggleAligCentroid(self, event=None):
         self.aligCentroidCalculated = False
-        self.showAligCentroid = not(self.showAligCentroid)
+        self.showAligCentroid = not (self.showAligCentroid)
 
     def toggleCurCentroid(self, event=None):
-        self.showCurCentroid = not(self.showCurCentroid)
-
-    def calcCurCentroid(self, imageData):
-        """
-            Returns:
-                tuple with coordinates for centre ordered by dimension,
-                i.e. (y, x)
-            """
-        try:
-            thresh = threshold_otsu(imageData)
-        except ValueError:
-            ## Happens for example if all pixels in the image have the
-            ## same value.  Return the middle of the image.
-            return [l / 2 for l in imageData.shape]
-
-        masked = imageData.copy()
-        masked[masked < thresh] = 0
-        y_pos, x_pos = center_of_mass(masked)
-
-        self.y_cur_cent = (y_pos - (imageData.shape[0]/2))/(imageData.shape[0]/2)
-        self.x_cur_cent = (x_pos - (imageData.shape[1]/2))/(imageData.shape[1]/2)
-
-        if self.y_alig_cent == None or self.x_alig_cent == None:
-            pass
-        else:
-            self.diff_y = self.y_cur_cent - self.y_alig_cent
-            self.diff_x = self.x_cur_cent - self.x_alig_cent
-            totaldist = (self.diff_y ** 2 + self.diff_x ** 2) ** 0.5
+        self.showCurCentroid = not (self.showCurCentroid)
 
     ## Convert window co-ordinates to gl co-ordinates.
     def canvasToGl(self, x, y):

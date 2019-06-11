@@ -123,6 +123,7 @@ class MosaicCanvas(wx.glcanvas.GLCanvas):
         ## A buffer of images waiting to be added to the mosaic.
         self.pendingImages = queue.Queue(BUFFER_LENGTH)
 
+
         self.Bind(wx.EVT_PAINT, self.onPaint)
         self.Bind(wx.EVT_MOUSE_EVENTS, mouseCallback)
         # Do nothing on this event, to avoid flickering.

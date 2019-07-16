@@ -98,23 +98,23 @@ class IntensityProfiler(object):
             peakx, peaky = self._beadCentre
             # Use a the fifth of the data around the bead, or to edge of dataset.
             dataSubset = self._data[:,
-                              max(0, peaky-halfWidth):min(ny, peaky+halfWidth),
-                              max(0, peakx-halfWidth):min(nx, peakx+halfWidth)]
+                              max(0, int(peaky-halfWidth)):min(ny, int(peaky+halfWidth)),
+                              max(0, int(peakx-halfWidth)):min(nx, int(peakx+halfWidth))]
             # Estimate background from image corners.
-            bkg = np.min([np.mean(self._data[:,:nx/10,:ny/10]),
-                          np.mean(self._data[:,:-nx/10,:ny/10]),
-                          np.mean(self._data[:,:-nx/10,:-ny/10]),
-                          np.mean(self._data[:,:nx/10,:-ny/10])])
+            bkg = np.min([np.mean(self._data[:,:int(nx/10),:int(ny/10)]),
+                          np.mean(self._data[:,:int(-nx/10),:int(ny/10)]),
+                          np.mean(self._data[:,:int(-nx/10),:int(-ny/10)]),
+                          np.mean(self._data[:,:int(nx/10),:int(-ny/10)])])
             phaseArr = np.sum(np.sum(dataSubset - bkg, axis=2), axis=1)
             phaseArr = np.reshape(phaseArr, (-1, nPhases)).astype(np.float32)
             sepArr = np.dot(self.sepmatrix(), phaseArr.transpose())
-            mag = np.zeros((nPhases/2 + 1, nz/nPhases)).astype(np.float32)
-            phi = np.zeros((nPhases/2 + 1, nz/nPhases)).astype(np.float32)
+            mag = np.zeros((int(nPhases/2 + 1), int(nz/nPhases))).astype(np.float32)
+            phi = np.zeros((int(nPhases/2 + 1), int(nz/nPhases))).astype(np.float32)
             mag[0] = sepArr[0]
 
             for order in range (1,3):
-                mag[order] = np.sqrt(sepArr[2*order-1]**2 + sepArr[2*order]**2)
-                phi[order] = np.arctan2(sepArr[2*order], sepArr[2*order-1])
+                mag[order] = np.sqrt(sepArr[int(2*order)-1]**2 + sepArr[int(2*order)]**2)
+                phi[order] = np.arctan2(sepArr[int(2*order)], sepArr[int(2*order)-1])
             # Average a few points around the peak
             beadAverage = np.average(np.average(
                               self._data[:, peaky-2:peaky+2, peakx-2:peakx+2],
@@ -161,19 +161,19 @@ class IntensityProfiler(object):
             if self._beadCentre is None or not refine:
                 # Search around centre of dataset.
                 middle = self._data[:,
-                                    3*ny / 8 : 5*ny / 8,
-                                    3*nx / 8 : 5*nx / 8]
-                xOffset = nx/2 - middle.shape[-1]/2
-                yOffset = ny/2 - middle.shape[-2]/2
+                                    int(3*ny / 8) : int(5*ny / 8),
+                                    int(3*nx / 8) : int(5*nx / 8)]
+                xOffset = int(nx/2 - middle.shape[-1]/2)
+                yOffset = int(ny/2 - middle.shape[-2]/2)
             else:
                 # Search around current _beadCentre.
                 n = 24
                 x0, y0 = self._beadCentre
                 middle = self._data[:,
-                                    y0 - n/2 : y0 + n/2,
-                                    x0 - n/2 : x0 + n/2]
-                xOffset = x0 - n/2
-                yOffset = y0 - n/2
+                                    y0 - int(n/2) : y0 + int(n/2),
+                                    x0 - int(n/2) : x0 + int(n/2)]
+                xOffset = int(x0 - n/2)
+                yOffset = int(y0 - n/2)
             peakPosition = np.argmax(middle)
             (z, y, x) = np.unravel_index(peakPosition, middle.shape)
             self._beadCentre = (x + xOffset, y + yOffset)
@@ -186,7 +186,7 @@ class IntensityProfiler(object):
             with self.openData():
                 nz = self._data.shape[0]
                 dz = min(100, nz / 3)
-                subset = self._data[nz/2 - dz : nz/2 + dz, :, :].copy()
+                subset = self._data[int(nz/2 - dz) : int(nz/2 + dz), :, :].copy()
             # Single step np.mean leaves open refs to self._data, for some reason.
             #self._projection = np.mean(subset, axis=0)
             # Create empty array and use indexed mean to avoid stray refs.
@@ -210,7 +210,7 @@ class IntensityProfiler(object):
         phi = 2*np.pi / nphases
         for j in range(nphases):
             sepmat[0, j] = 1.0/nphases
-            for order in range(1,norders):
+            for order in range(1,int(norders)):
                 sepmat[2*order-1,j] = 2.0 * np.cos(j*order*phi)/nphases
                 sepmat[2*order  ,j] = 2.0 * np.sin(j*order*phi)/nphases
         return sepmat
@@ -422,7 +422,6 @@ class IntensityProfilerFrame(wx.Frame):
         proj -= np.min(proj)
         proj /= np.max(proj)
         proj = (proj * 255).astype(np.uint8)
-        d = range(-10,-3) + range(3, 10)
         img = np.dstack((proj, proj, proj))
         nx, ny = proj.shape
         self.bitmap.Bitmap.SetSize((nx,ny))

@@ -367,22 +367,22 @@ class IntensityProfilerFrame(wx.Frame):
         # Raw intensity at one point in XY.
         peakY = self.profiler.results['peak'][1:]
         peakX = np.arange(len(peakY)) * (self.profiler.zDelta or 1)
-        peak = plot.PolyLine(zip(peakX, peakY), colour='red')
+        peak = plot.PolyLine(list(zip(peakX, peakY)), colour='red')
         # Average intensity over a few XY points around the peak.
         # The raw intensity plot can vary greatly when the z-profile is taken
         # just one pixel away; this average plot can help show if a dip in the
         # raw data is a feature of the bead, or due to noise.
         avgY = self.profiler.results['avg'][1:]
         avgX = np.arange(len(avgY)) * (self.profiler.zDelta or 1)
-        avg = plot.PolyLine(zip(avgX, avgY), colour='red', style=wx.DOT)
+        avg = plot.PolyLine(list(zip(avgX, avgY)), colour='red', style=wx.DOT)
         # First order.
         firstY = self.profiler.results['mag'][1,1:]
         firstX = np.arange(len(firstY)) * (self.profiler.zDelta or 1)
-        first = plot.PolyLine(zip(firstX, firstY), colour='green')
+        first = plot.PolyLine(list(zip(firstX, firstY)), colour='green')
         # Second order.
         secondY = self.profiler.results['mag'][2,1:]
         secondX = np.arange(len(secondY)) * (self.profiler.zDelta or 1)
-        second = plot.PolyLine(zip(secondX, secondY), colour='blue')
+        second = plot.PolyLine(list(zip(secondX, secondY)), colour='blue')
         # Add line graphs to a graphics context.
         if self.profiler.zDelta is None:
             xLabel = 'Z slice'

@@ -804,7 +804,7 @@ class ViewCanvas(wx.glcanvas.GLCanvas):
         masked[masked < thresh] = 0
         y_pos, x_pos = center_of_mass(masked)
 
-        self.y_cur_cent = (y_pos - (imageData.shape[0]/2))/(imageData.shape[0]/2)
+        self.y_cur_cent = -1.0*((y_pos - (imageData.shape[0]/2))/(imageData.shape[0]/2))
         self.x_cur_cent = (x_pos - (imageData.shape[1]/2))/(imageData.shape[1]/2)
 
         if self.y_alig_cent == None or self.x_alig_cent == None:

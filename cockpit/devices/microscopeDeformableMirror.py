@@ -583,6 +583,8 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         return self.current_sensoreless_image
 
     def measureImageQuality(self, current_zernike):
+        self.iteration += 1
+        print("Optimising iteration %i" %self.iteration)
         # Send actuator positions to the DM
         applied_phase = np.zeros(self.no_actuators)
         applied_phase[self.nollZernike] = current_zernike
@@ -647,6 +649,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
 
         print("Optimising...")
         # Apply the first Zernike mode
+        self.iteration = 0
         res = minimize(x0= z_init, fun=self.measureImageQuality, method='Nelder-Mead', options={
             'initial_simplex': simplex_init,
             'maxiter': self.numMes})

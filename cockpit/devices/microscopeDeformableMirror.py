@@ -39,7 +39,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         self.proxy = None
         self.sendImage = False
         self.curCamera = None
-        self._imageReady = threading.Event()
+        self._imageReady = Event()
 
         self.buttonName = 'Deformable Mirror'
 
@@ -587,17 +587,17 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         self.iteration += 1
         print("Optimising iteration %i" %self.iteration)
         # Send actuator positions to the DM
-        timeout = 1. + self.curCamera.getExposureTime(isExact=False) / 1000
+        timeout = 3 * self.curCamera.getExposureTime(isExact=False) / 1000
         applied_phase = np.zeros(self.no_actuators)
         applied_phase[self.nollZernike] = current_zernike
         self.zernike_applied.append(np.ndarray.tolist(applied_phase))
         self.proxy.set_phase(applied_phase, offset=self.actuator_offset)
 
         # Take image with current actutor values
-        self._imageReady.clear()
-        cockpit.interfaces.imager.takeImage()
+        cockpit.interfaces.imager.takeImage()  #
+        time.sleep(timeout)
         if not self._imageReady.wait(timeout=timeout):
-            raise Exception ("takeImage timeout.")
+            raise Exception("takeImage timeout.")
 
         # Calculate quality metric and return negative
         ## We return the negative as the simplex optimisation is a minimisation problem so we need to look for a global
@@ -605,6 +605,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         image = self.getAOImage()
         self.correction_stack.append(np.ndarray.tolist(image))
         metric = self.proxy.measure_fourier_metric(image, pixel_size=self.pixelSize)
+        self._imageReady.clear()
         return -metric
 
     def correctSensorless(self, camera, nollZernike=np.array([11, 22, 5, 6, 7, 8, 9, 10])):

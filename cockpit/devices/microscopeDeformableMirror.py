@@ -30,7 +30,7 @@ import cockpit.util.charAssayViewer as charAssayViewer
 import numpy as np
 import scipy.stats as stats
 from scipy.optimize import minimize
-
+from threading import Event
 
 # the AO device subclasses Device to provide compatibility with microscope.
 class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
@@ -39,6 +39,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         self.proxy = None
         self.sendImage = False
         self.curCamera = None
+        self._imageReady = threading.Event()
 
         self.buttonName = 'Deformable Mirror'
 
@@ -95,8 +96,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         events.subscribe('camera enable',
                          lambda c, isOn: self.enablecamera(c, isOn))
 
-    def takeImage(self):
-        cockpit.interfaces.imager.takeImage()
+
 
     def enablecamera(self, camera, isOn):
         self.curCamera = camera
@@ -578,6 +578,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
 
     def setAOImage(self, image, timestamp):
         self.current_sensoreless_image = image
+        self._imageReady.set()
 
     def getAOImage(self):
         return self.current_sensoreless_image
@@ -586,13 +587,17 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         self.iteration += 1
         print("Optimising iteration %i" %self.iteration)
         # Send actuator positions to the DM
+        timeout = 1. + self.curCamera.getExposureTime(isExact=False) / 1000
         applied_phase = np.zeros(self.no_actuators)
         applied_phase[self.nollZernike] = current_zernike
         self.zernike_applied.append(np.ndarray.tolist(applied_phase))
         self.proxy.set_phase(applied_phase, offset=self.actuator_offset)
 
         # Take image with current actutor values
-        self.takeImage()
+        self._imageReady.clear()
+        cockpit.interfaces.imager.takeImage()
+        if not self._imageReady.wait(timeout=timeout):
+            raise Exception ("takeImage timeout.")
 
         # Calculate quality metric and return negative
         ## We return the negative as the simplex optimisation is a minimisation problem so we need to look for a global
@@ -714,7 +719,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         log_file.write("\n")
         log_file.close()
 
-        wx.CallAfter(self.takeImage)
+        wx.CallAfter(cockpit.interfaces.imager.takeImage)
 
 
 # This debugging window lets each digital lineout of the DSP be manipulated

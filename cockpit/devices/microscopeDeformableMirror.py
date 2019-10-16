@@ -594,7 +594,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
                                 id=i + 1)
             cockpit.gui.guiUtils.placeMenuAtMouse(self.panel, menu)
 
-    def correctSensorlessSetup(self, camera, nollZernike=np.array([11, 22, 5, 6, 7, 8, 9, 10])):
+    def correctSensorlessSetup(self, camera, nollZernike=np.array([13, 24, 3, 5, 7, 8, 6, 9])):
         print("Performing sensorless AO setup")
         # Note: Default is to correct Primary and Secondary Spherical aberration and both
         # orientations of coma, astigmatism and trefoil
@@ -626,8 +626,8 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
 
         # Initialise the Zernike modes to apply
         print("Initialising the Zernike modes to apply")
-        self.numMes = 9
-        num_it = 2
+        self.numMes = 7
+        num_it = 1
         self.z_steps = np.linspace(-1.5, 1.5, self.numMes)
 
         for ii in range(num_it):

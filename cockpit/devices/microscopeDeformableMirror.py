@@ -666,33 +666,11 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
     def correctSensorlessProcessing(self):
         print("Processing sensorless image")
         if len(self.correction_stack) < self.zernike_applied.shape[0]:
-            if len(self.correction_stack) % self.numMes == 0:
-                # Find aberration amplitudes and correct
-                ind = int(len(self.correction_stack) / self.numMes)
-                nollInd = np.where(self.zernike_applied[len(self.correction_stack) - 1, :] != 0)[0][0] + 1
-                print("Current Noll index being corrected: %i" % nollInd)
-                current_stack = np.asarray(self.correction_stack)[(ind - 1) * self.numMes:ind * self.numMes, :, :]
-                amp_to_correct, ac_pos_correcting = self.proxy.correct_sensorless_single_mode(image_stack=current_stack,
-                                                                                              zernike_applied=self.z_steps,
-                                                                                              nollIndex=nollInd,
-                                                                                              offset=self.actuator_offset)
-                self.actuator_offset = ac_pos_correcting
-                self.sensorless_correct_coef[nollInd - 1] += amp_to_correct
-                print("Aberrations measured: ", self.sensorless_correct_coef)
-                print("Actuator positions applied: ", self.actuator_offset)
+            # Advance counter by 1 and apply next phase
+            self.proxy.set_phase(self.zernike_applied[len(self.correction_stack), :], offset=self.actuator_offset)
 
-                # Advance counter by 1 and apply next phase
-                self.proxy.set_phase(self.zernike_applied[len(self.correction_stack), :], offset=self.actuator_offset)
-
-                # Take image, but ensure it's called after the phase is applied
-                wx.CallAfter(self.takeImage)
-            else:
-                # Advance counter by 1 and apply next phase
-                self.proxy.set_phase(self.zernike_applied[len(self.correction_stack), :], offset=self.actuator_offset)
-
-                # Take image, but ensure it's called after the phase is applied
-                time.sleep(0.1)
-                wx.CallAfter(self.takeImage)
+            # Take image, but ensure it's called after the phase is applied
+            wx.CallAfter(self.takeImage)
         else:
             # Once all images have been obtained, unsubscribe
             print("Unsubscribing to camera %s events" % self.camera.name)
@@ -720,16 +698,14 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
             np.save(nollZernike_file_path, self.nollZernike)
 
             # Find aberration amplitudes and correct
-            ind = int(len(self.correction_stack) / self.numMes)
-            nollInd = np.where(self.zernike_applied[len(self.correction_stack) - 1, :] != 0)[0][0] + 1
-            print("Current Noll index being corrected: %i" % nollInd)
-            current_stack = np.asarray(self.correction_stack)[(ind - 1) * self.numMes:ind * self.numMes, :, :]
-            amp_to_correct, ac_pos_correcting = self.proxy.correct_sensorless_single_mode(image_stack=current_stack,
-                                                                                          zernike_applied=self.z_steps,
-                                                                                          nollIndex=nollInd,
-                                                                                          offset=self.actuator_offset)
+            print("Calculating Zernike mode corrections...")
+            self.sensorless_correct_coef, ac_pos_correcting = self.proxy.correct_sensorless_all_modes(image_stack=self.correction_stack,
+                                                                                        zernike_applied=self.zernike_applied,
+                                                                                        nollIndex=self.nollZernike,
+                                                                                        wavelength=561*10**-9,
+                                                                                        NA=1.4,
+                                                                                        pixel_size=((6.5*10**-6)/40))
             self.actuator_offset = ac_pos_correcting
-            self.sensorless_correct_coef[nollInd - 1] += amp_to_correct
             print("Aberrations measured: ", self.sensorless_correct_coef)
             print("Actuator positions applied: ", self.actuator_offset)
             sensorless_correct_coef_file_path = os.path.join(os.path.expandvars('%LocalAppData%'),

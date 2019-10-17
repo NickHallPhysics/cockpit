@@ -45,7 +45,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
 
     def initialize(self):
         self.proxy = Pyro4.Proxy(self.uri)
-        self.proxy.set_trigger(cp_ttype="RISING_EDGE", cp_tmode="ONCE")
+        #self.proxy.set_trigger(cp_ttype="RISING_EDGE", cp_tmode="ONCE")
         self.no_actuators = self.proxy.get_n_actuators()
         self.actuator_slopes = np.zeros(self.no_actuators)
         self.actuator_intercepts = np.zeros(self.no_actuators)
@@ -238,10 +238,10 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         result = []
         self.handler = cockpit.handlers.executor.DelegateTrigger(
             "dm", "dm group", True,
-            {'examineActions': self.examineActions,
+           {'examineActions': self.examineActions,
              'getMovementTime': lambda *args: dt,
              'executeTable': self.executeTable})
-        self.handler.delegateTo(trigsource, trigline, 0, dt)
+        #self.handler.delegateTo(trigsource, trigline, 0, dt)
         result.append(self.handler)
         return result
 

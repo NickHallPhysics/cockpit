@@ -85,7 +85,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
             pass
 
         try:
-            self.controlMatrix = Config.getValue('dm_controlMatrix')
+            self.controlMatrix = np.loadtxt("C:\\Users\\2Photon\\Desktop\\Control.txt")
             self.proxy.set_controlMatrix(self.controlMatrix)
         except:
             pass
@@ -93,23 +93,6 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         # subscribe to enable camera event to get access the new image queue
         events.subscribe('camera enable',
                          lambda c, isOn: self.enablecamera(c, isOn))
-
-    def finalizeInitialization(self):
-        # A mapping of context-menu entries to functions.
-        # Define in tuples - easier to read and reorder.
-        menuTuples = (('Fourier metric', 'fourier'),
-                      ('Contrast metric', 'contrast'),
-                      ('Fourier Power metric', 'fourier_power'),)
-        # Store as ordered dict for easy item->func lookup.
-        self.menuItems = OrderedDict(menuTuples)
-
-    ### Context menu and handlers ###
-    def menuCallback(self, index, item):
-        return self.proxy.set_metric(self.menuItems[item])
-
-    def onRightMouse(self, event):
-        menu = cockpit.gui.device.Menu(self.menuItems.keys(), self.menuCallback)
-        menu.show(event)
 
     def takeImage(self):
         cockpit.interfaces.imager.takeImage()
@@ -238,7 +221,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         result = []
         self.handler = cockpit.handlers.executor.DelegateTrigger(
             "dm", "dm group", True,
-           {'examineActions': self.examineActions,
+            {'examineActions': self.examineActions,
              'getMovementTime': lambda *args: dt,
              'executeTable': self.executeTable})
         #self.handler.delegateTo(trigsource, trigline, 0, dt)
@@ -347,8 +330,6 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         sensorlessAOButton = wx.Button(self.panel, label='Sensorless AO')
         sensorlessAOButton.Bind(wx.EVT_BUTTON, lambda evt: self.displaySensorlessAOMenu())
         self.elements['Sensorless AO'] = sensorlessAOButton
-
-        self.panel.Bind(wx.EVT_CONTEXT_MENU, self.onRightMouse)
 
         for e in self.elements.values():
             rowSizer.Add(e, 0, wx.EXPAND)
@@ -487,7 +468,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
             self.proxy.get_controlMatrix()
         except Exception as e:
             try:
-                self.controlMatrix = Config.getValue('dm_controlMatrix')
+                self.controlMatrix = np.loadtxt("C:\\Users\\2Photon\\Desktop\\Control.txt")
                 self.proxy.set_controlMatrix(self.controlMatrix)
             except:
                 raise e
@@ -547,7 +528,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         app.MainLoop()
 
     def onApplySysFlat(self):
-        self.sys_flat_values = np.asarray(Config.getValue('dm_sys_flat'))
+        self.sys_flat_values = np.loadtxt("C:\\Users\\2Photon\\Desktop\\FlatVoltages.txt")
         self.proxy.send(self.sys_flat_values)
 
     def onApplyLastPattern(self):
@@ -603,7 +584,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
             self.proxy.get_controlMatrix()
         except Exception as e:
             try:
-                self.controlMatrix = Config.getValue('dm_controlMatrix')
+                self.controlMatrix = np.loadtxt("C:\\Users\\2Photon\\Desktop\\Control.txt")
                 self.proxy.set_controlMatrix(self.controlMatrix)
             except:
                 raise e
@@ -626,9 +607,9 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
 
         # Initialise the Zernike modes to apply
         print("Initialising the Zernike modes to apply")
-        self.numMes = 7
-        num_it = 1
-        self.z_steps = np.linspace(-1.5, 1.5, self.numMes)
+        self.numMes = 9
+        num_it = 2
+        self.z_steps = np.linspace(-0.3, 0.3, self.numMes)
 
         for ii in range(num_it):
             it_zernike_applied = np.zeros((self.numMes * self.nollZernike.shape[0], self.no_actuators))
@@ -666,11 +647,36 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
     def correctSensorlessProcessing(self):
         print("Processing sensorless image")
         if len(self.correction_stack) < self.zernike_applied.shape[0]:
-            # Advance counter by 1 and apply next phase
-            self.proxy.set_phase(self.zernike_applied[len(self.correction_stack), :], offset=self.actuator_offset)
+            if len(self.correction_stack) % self.numMes == 0:
+                # Find aberration amplitudes and correct
+                ind = int(len(self.correction_stack) / self.numMes)
+                nollInd = np.where(self.zernike_applied[len(self.correction_stack) - 1, :] != 0)[0][0] + 1
+                print("Current Noll index being corrected: %i" % nollInd)
+                current_stack = np.asarray(self.correction_stack)[(ind - 1) * self.numMes:ind * self.numMes, :, :]
+                amp_to_correct, ac_pos_correcting = self.proxy.correct_sensorless_single_mode(image_stack=current_stack,
+                                                                                              zernike_applied=self.z_steps,
+                                                                                              nollIndex=nollInd,
+                                                                                              offset=self.actuator_offset,
+                                                                                              wavelength=550*10**-9,
+                                                                                              NA=1.4,
+                                                                                              pixel_size=((6.5*10**-6)/40))
+                self.actuator_offset = ac_pos_correcting
+                self.sensorless_correct_coef[nollInd - 1] += amp_to_correct
+                print("Aberrations measured: ", self.sensorless_correct_coef)
+                print("Actuator positions applied: ", self.actuator_offset)
 
-            # Take image, but ensure it's called after the phase is applied
-            wx.CallAfter(self.takeImage)
+                # Advance counter by 1 and apply next phase
+                self.proxy.set_phase(self.zernike_applied[len(self.correction_stack), :], offset=self.actuator_offset)
+
+                # Take image, but ensure it's called after the phase is applied
+                wx.CallAfter(self.takeImage)
+            else:
+                # Advance counter by 1 and apply next phase
+                self.proxy.set_phase(self.zernike_applied[len(self.correction_stack), :], offset=self.actuator_offset)
+
+                # Take image, but ensure it's called after the phase is applied
+                time.sleep(0.1)
+                wx.CallAfter(self.takeImage)
         else:
             # Once all images have been obtained, unsubscribe
             print("Unsubscribing to camera %s events" % self.camera.name)
@@ -698,14 +704,19 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
             np.save(nollZernike_file_path, self.nollZernike)
 
             # Find aberration amplitudes and correct
-            print("Calculating Zernike mode corrections...")
-            self.sensorless_correct_coef, ac_pos_correcting = self.proxy.correct_sensorless_all_modes(image_stack=self.correction_stack,
-                                                                                        zernike_applied=self.zernike_applied,
-                                                                                        nollIndex=self.nollZernike,
-                                                                                        wavelength=561*10**-9,
-                                                                                        NA=1.4,
-                                                                                        pixel_size=((6.5*10**-6)/40))
+            ind = int(len(self.correction_stack) / self.numMes)
+            nollInd = np.where(self.zernike_applied[len(self.correction_stack) - 1, :] != 0)[0][0] + 1
+            print("Current Noll index being corrected: %i" % nollInd)
+            current_stack = np.asarray(self.correction_stack)[(ind - 1) * self.numMes:ind * self.numMes, :, :]
+            amp_to_correct, ac_pos_correcting = self.proxy.correct_sensorless_single_mode(image_stack=current_stack,
+                                                                                          zernike_applied=self.z_steps,
+                                                                                          nollIndex=nollInd,
+                                                                                          offset=self.actuator_offset,
+                                                                                          wavelength=550*10**-9,
+                                                                                          NA=1.4,
+                                                                                          pixel_size=((6.5*10**-6)/40))
             self.actuator_offset = ac_pos_correcting
+            self.sensorless_correct_coef[nollInd - 1] += amp_to_correct
             print("Aberrations measured: ", self.sensorless_correct_coef)
             print("Actuator positions applied: ", self.actuator_offset)
             sensorless_correct_coef_file_path = os.path.join(os.path.expandvars('%LocalAppData%'),

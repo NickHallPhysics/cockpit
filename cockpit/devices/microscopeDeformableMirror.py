@@ -94,6 +94,25 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         events.subscribe('camera enable',
                          lambda c, isOn: self.enablecamera(c, isOn))
 
+    def finalizeInitialization(self):
+        # A mapping of context-menu entries to functions.
+        # Define in tuples - easier to read and reorder.
+        menuTuples = (('Fourier metric', 'fourier'),
+                      ('Contrast metric', 'contrast'),
+                      ('Fourier Power metric', 'fourier_power'),
+                      ('Gradient metric', 'gradient'),
+                      ('Second Moment metric', 'second_moment'),)
+        # Store as ordered dict for easy item->func lookup.
+        self.menuItems = OrderedDict(menuTuples)
+
+    ### Context menu and handlers ###
+    def menuCallback(self, index, item):
+        return self.proxy.set_metric(self.menuItems[item])
+
+    def onRightMouse(self, event):
+        menu = cockpit.gui.device.Menu(self.menuItems.keys(), self.menuCallback)
+        menu.show(event)
+
     def takeImage(self):
         cockpit.interfaces.imager.takeImage()
 

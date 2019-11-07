@@ -133,6 +133,69 @@ class MicroscopeCompositeAO(MicroscopeBase, device.Device):
         self.curCamera = camera
         # Subscribe to new image events only after canvas is prepared.
 
+    ### UI functions ###
+    def makeUI(self, parent):
+        self.panel = wx.Panel(parent)
+        self.panel.SetDoubleBuffered(True)
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        label_setup = cockpit.gui.device.Label(
+            parent=self.panel, label='AO set-up')
+        sizer.Add(label_setup)
+        rowSizer = wx.BoxSizer(wx.VERTICAL)
+        self.elements = OrderedDict()
+
+        # Button to calibrate the DM
+        selectCircleButton = wx.Button(self.panel, label='Select ROI')
+        selectCircleButton.Bind(wx.EVT_BUTTON, self.onSelectCircle)
+        self.elements['selectCircleButton'] = selectCircleButton
+
+        # Button to calibrate the DM
+        calibrateButton = wx.Button(self.panel, label='Calibrate')
+        calibrateButton.Bind(wx.EVT_BUTTON, lambda evt: self.onCalibrate())
+        self.elements['calibrateButton'] = calibrateButton
+
+        characteriseButton = wx.Button(self.panel, label='Characterise')
+        characteriseButton.Bind(wx.EVT_BUTTON, lambda evt: self.onCharacterise())
+        self.elements['characteriseButton'] = characteriseButton
+
+        label_use = cockpit.gui.device.Label(
+            parent=self.panel, label='AO use')
+        self.elements['label_use'] = label_use
+
+        # Reset the DM actuators
+        resetButton = wx.Button(self.panel, label='Reset DM')
+        resetButton.Bind(wx.EVT_BUTTON, lambda evt: self.proxy.reset())
+        self.elements['resetButton'] = resetButton
+
+        # Apply the actuator values correcting the system aberrations
+        applySysFlat = wx.Button(self.panel, label='System Flat')
+        applySysFlat.Bind(wx.EVT_BUTTON, lambda evt: self.onApplySysFlat())
+        self.elements['applySysFlat'] = applySysFlat
+
+        # Visualise current interferometric phase
+        visPhaseButton = wx.Button(self.panel, label='Visualise Phase')
+        visPhaseButton.Bind(wx.EVT_BUTTON, lambda evt: self.onVisualisePhase())
+        self.elements['visPhaseButton'] = visPhaseButton
+
+        # Apply last actuator values
+        applyLastPatternButton = wx.Button(self.panel, label='Apply last pattern')
+        applyLastPatternButton.Bind(wx.EVT_BUTTON, lambda evt: self.onApplyLastPattern())
+        self.elements['applyLastPatternButton'] = applyLastPatternButton
+
+        # Button to perform sensorless correction
+        sensorlessAOButton = wx.Button(self.panel, label='Sensorless AO')
+        sensorlessAOButton.Bind(wx.EVT_BUTTON, lambda evt: self.displaySensorlessAOMenu())
+        self.elements['Sensorless AO'] = sensorlessAOButton
+
+        self.panel.Bind(wx.EVT_CONTEXT_MENU, self.onRightMouse)
+
+        for e in self.elements.values():
+            rowSizer.Add(e, 0, wx.EXPAND)
+        sizer.Add(rowSizer, 0, wx.EXPAND)
+        self.panel.SetSizerAndFit(sizer)
+        self.hasUI = True
+        return self.panel
+
     def bin_ndarray(self, ndarray, new_shape, operation='sum'):
         """
         Function acquired from Stack Overflow: https://stackoverflow.com/a/29042041. Stack Overflow or other Stack Exchange
@@ -306,18 +369,28 @@ class MicroscopeCompositeAO(MicroscopeBase, device.Device):
         frame = phaseViewer.viewPhase(unwrapped_phase, power_spectrum)
         app.MainLoop()
 
+    def onApplySysFlat(self):
+        self.sys_flat_values = np.asarray(Config.getValue('dm_sys_flat'))
+        self.proxy.send(self.sys_flat_values)
+
     def onApplyLastPattern(self):
         last_ac = self.proxy.get_last_actuator_values()
         self.proxy.send(last_ac)
+
+    ### Sensorless AO functions ###
+
+    ## Display a menu to the user letting them choose which camera
+    # to use to perform sensorless AO. Of course, if only one camera is
+    # available, then we just perform sensorless AO.
 
     def displaySensorlessAOMenu(self):
         self.showCameraMenu("Perform sensorless AO with %s camera",
                             self.correctSensorlessSetup)
 
-        ## Generate a menu where the user can select a camera to use to perform
-        # some action.
-        # \param text String template to use for entries in the menu.
-        # \param action Function to call with the selected camera as a parameter.
+    ## Generate a menu where the user can select a camera to use to perform
+    # some action.
+    # \param text String template to use for entries in the menu.
+    # \param action Function to call with the selected camera as a parameter.
 
     def showCameraMenu(self, text, action):
         cameras = depot.getActiveCameras()

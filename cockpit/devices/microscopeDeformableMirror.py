@@ -10,6 +10,7 @@ import os
 from collections import OrderedDict
 import cockpit.devices
 from cockpit.devices import device
+from cockpit.devices.adaptiveOpticsCompositeDevice import MicroscopeCompositeAO
 from cockpit import events
 import wx
 import cockpit.interfaces.stageMover
@@ -46,11 +47,14 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
     def initialize(self):
         self.proxy = Pyro4.Proxy(self.uri)
         self.proxy.set_trigger(cp_ttype="RISING_EDGE", cp_tmode="ONCE")
+        "This variable needs to be called differently for just the DM"
         self.no_actuators = self.proxy.get_n_actuators()
+        # self.no_actuators = self.proxy.numActuators
         self.actuator_slopes = np.zeros(self.no_actuators)
         self.actuator_intercepts = np.zeros(self.no_actuators)
 
         # Need intial values for sensorless AO
+        "These variables are only needed in the composite device"
         self.numMes = 9
         self.num_it = 2
         self.z_max = 1.5
@@ -59,9 +63,13 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
 
         # Excercise the DM to remove residual static and then set to 0 position
         for ii in range(50):
+            "This variable needs to be called differently for just the DM"
             self.proxy.send(np.random.rand(self.no_actuators))
+            # self.proxy.apply_pattern(np.random.rand(self.no_actuators))
             time.sleep(0.01)
+        "This variable needs to be called differently for just the DM"
         self.proxy.reset()
+        # self.proxy.apply_pattern(np.zeros(self.no_actuators) + 0.5)
 
         # Create accurate look up table for certain Z positions
         # LUT dict has key of Z positions
@@ -84,6 +92,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         self.remote_focus_LUT = []
 
         # Load values from config
+        "These variables are only needed in the composite device"
         try:
             self.parameters = Config.getValue('dm_circleParams')
             self.proxy.set_roi(self.parameters[0], self.parameters[1],
@@ -101,6 +110,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         events.subscribe('camera enable',
                          lambda c, isOn: self.enablecamera(c, isOn))
 
+    "This method should be moved to the composite device"
     def finalizeInitialization(self):
         # A mapping of context-menu entries to functions.
         # Define in tuples - easier to read and reorder.
@@ -114,12 +124,14 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         self.menuItems = OrderedDict(menuTuples)
 
     ### Context menu and handlers ###
+    "This method should be moved to the composite device"
     def menuCallback(self, index, item):
         try:
             self.menuItems[item]()
         except TypeError:
             return self.proxy.set_metric(self.menuItems[item])
 
+    "This method should be moved to the composite device"
     def set_sensorless_param(self):
         inputs = cockpit.gui.dialogs.getNumberDialog.getManyNumbersFromUser(
                 None,
@@ -134,13 +146,16 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         self.nollZernike = np.asarray([int(z_ind) for z_ind in inputs[-1][1:-1].split(', ')])
 
 
+    "This method should be moved to the composite device"
     def onRightMouse(self, event):
         menu = cockpit.gui.device.Menu(self.menuItems.keys(), self.menuCallback)
         menu.show(event)
 
+    "This method should be moved to the composite device"
     def takeImage(self):
         cockpit.interfaces.imager.takeImage()
 
+    "This method should be moved to the composite device"
     def enablecamera(self, camera, isOn):
         self.curCamera = camera
         # Subscribe to new image events only after canvas is prepared.
@@ -333,15 +348,18 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         self.elements = OrderedDict()
 
         # Button to calibrate the DM
+        "The method called should be called from the composite device"
         selectCircleButton = wx.Button(self.panel, label='Select ROI')
-        selectCircleButton.Bind(wx.EVT_BUTTON, self.onSelectCircle)
+        selectCircleButton.Bind(wx.EVT_BUTTON, MicroscopeCompositeAO.onSelectCircle)
         self.elements['selectCircleButton'] = selectCircleButton
 
         # Button to calibrate the DM
+        "The method called should be called from the composite device"
         calibrateButton = wx.Button(self.panel, label='Calibrate')
         calibrateButton.Bind(wx.EVT_BUTTON, lambda evt: self.onCalibrate())
         self.elements['calibrateButton'] = calibrateButton
 
+        "The method called should be called from the composite device"
         characteriseButton = wx.Button(self.panel, label='Characterise')
         characteriseButton.Bind(wx.EVT_BUTTON, lambda evt: self.onCharacterise())
         self.elements['characteriseButton'] = characteriseButton
@@ -361,16 +379,19 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         self.elements['applySysFlat'] = applySysFlat
 
         # Visualise current interferometric phase
+        "The method called should be called from the composite device"
         visPhaseButton = wx.Button(self.panel, label='Visualise Phase')
         visPhaseButton.Bind(wx.EVT_BUTTON, lambda evt: self.onVisualisePhase())
         self.elements['visPhaseButton'] = visPhaseButton
 
         # Apply last actuator values
+        "The method called should be called from the composite device"
         applyLastPatternButton = wx.Button(self.panel, label='Apply last pattern')
         applyLastPatternButton.Bind(wx.EVT_BUTTON, lambda evt: self.onApplyLastPattern())
         self.elements['applyLastPatternButton'] = applyLastPatternButton
 
         # Button to perform sensorless correction
+        "The method called should be called from the composite device"
         sensorlessAOButton = wx.Button(self.panel, label='Sensorless AO')
         sensorlessAOButton.Bind(wx.EVT_BUTTON, lambda evt: self.displaySensorlessAOMenu())
         self.elements['Sensorless AO'] = sensorlessAOButton
@@ -400,6 +421,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         #        cockpit.interfaces.stageMover.mover.curHandlerIndex=originalHandlerIndex
         return (self.getPiezoPos())
 
+    "This method should be moved to the composite device"
     def bin_ndarray(self, ndarray, new_shape, operation='sum'):
         """
         Function acquired from Stack Overflow: https://stackoverflow.com/a/29042041. Stack Overflow or other Stack Exchange
@@ -434,6 +456,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
             ndarray = op(-1 * (i + 1))
         return ndarray
 
+    "This method should be moved to the composite device"
     def onSelectCircle(self, event):
         image_raw = self.proxy.acquire_raw()
         if np.max(image_raw) > 10:
@@ -452,12 +475,14 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         else:
             print("Detecting nothing but background noise")
 
+    "This method should be moved to the composite device"
     def createCanvas(self, temp, scale_factor):
         app = wx.App()
         temp = np.require(temp, requirements='C')
         frame = selectCircle.ROISelect(input_image=temp, scale_factor=scale_factor)
         app.MainLoop()
 
+    "This method should be moved to the composite device"
     def onCalibrate(self):
         self.parameters = Config.getValue('dm_circleParams')
         self.proxy.set_roi(self.parameters[0], self.parameters[1],
@@ -486,6 +511,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         Config.setValue('dm_controlMatrix', np.ndarray.tolist(controlMatrix))
         Config.setValue('dm_sys_flat', np.ndarray.tolist(sys_flat))
 
+    "This method should be moved to the composite device"
     def onCharacterise(self):
         self.parameters = Config.getValue('dm_circleParams')
         self.proxy.set_roi(self.parameters[0], self.parameters[1],
@@ -528,6 +554,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         frame = charAssayViewer.viewCharAssay(assay[1:, 1:])
         app.MainLoop()
 
+    "This method should be moved to the composite device"
     def onVisualisePhase(self):
         self.parameters = Config.getValue('dm_circleParams')
         self.proxy.set_roi(self.parameters[0], self.parameters[1],
@@ -577,6 +604,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         self.sys_flat_values = np.asarray(Config.getValue('dm_sys_flat'))
         self.proxy.send(self.sys_flat_values)
 
+    "This method should be moved to the composite device"
     def onApplyLastPattern(self):
         last_ac = self.proxy.get_last_actuator_values()
         self.proxy.send(last_ac)
@@ -600,6 +628,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
     ## Display a menu to the user letting them choose which camera
     # to use to perform sensorless AO. Of course, if only one camera is
     # available, then we just perform sensorless AO.
+    "This method should be moved to the composite device"
     def displaySensorlessAOMenu(self):
         self.showCameraMenu("Perform sensorless AO with %s camera",
                             self.correctSensorlessSetup)
@@ -608,6 +637,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
     # some action.
     # \param text String template to use for entries in the menu.
     # \param action Function to call with the selected camera as a parameter.
+    "This method should be moved to the composite device"
     def showCameraMenu(self, text, action):
         cameras = depot.getActiveCameras()
         if len(cameras) == 1:
@@ -621,6 +651,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
                                 id=i + 1)
             cockpit.gui.guiUtils.placeMenuAtMouse(self.panel, menu)
 
+    "This method should be moved to the composite device"
     def correctSensorlessSetup(self, camera):
         print("Performing sensorless AO setup")
         # Note: Default is to correct Primary and Secondary Spherical aberration and both
@@ -677,6 +708,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         # Take image. This will trigger the iterative sensorless AO correction
         wx.CallAfter(self.takeImage)
 
+    "This method should be moved to the composite device"
     def correctSensorlessImage(self, image, timestamp):
         if len(self.correction_stack) < self.zernike_applied.shape[0]:
             print("Correction image %i/%i" % (len(self.correction_stack) + 1, self.zernike_applied.shape[0]))
@@ -687,6 +719,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
             print("Error in unsubscribing to camera events. Trying again")
             events.unsubscribe("new image %s" % self.camera.name, self.correctSensorlessImage)
 
+    "This method should be moved to the composite device"
     def correctSensorlessProcessing(self):
         print("Processing sensorless image")
         if len(self.correction_stack) < self.zernike_applied.shape[0]:

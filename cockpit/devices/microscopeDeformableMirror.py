@@ -7,10 +7,8 @@
 # mirror as currently mounted on DeepSIM in Oxford
 
 import os
-from collections import OrderedDict
 import cockpit.devices
 from cockpit.devices import device
-from cockpit.devices.adaptiveOpticsCompositeDevice import MicroscopeCompositeAO
 from cockpit import events
 import wx
 import cockpit.interfaces.stageMover
@@ -23,11 +21,7 @@ import Pyro4
 import cockpit.util.userConfig as Config
 import cockpit.handlers.executor
 from cockpit.devices.microscopeDevice import MicroscopeBase
-from cockpit import depot
 import time
-import cockpit.util.selectCircROI as selectCircle
-import cockpit.util.phaseViewer as phaseViewer
-import cockpit.util.charAssayViewer as charAssayViewer
 import numpy as np
 import scipy.stats as stats
 

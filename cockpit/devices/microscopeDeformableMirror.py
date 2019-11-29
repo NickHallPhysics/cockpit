@@ -547,7 +547,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         app.MainLoop()
 
     def onApplySysFlat(self):
-        self.sys_flat_values = np.loadtxt("C:\\Users\\2Photon\\Desktop\\FlatVoltages.txt")
+        self.sys_flat_values = np.loadtxt("C:\\Users\\2Photon\\Desktop\\Voltages.txt")
         self.proxy.send(self.sys_flat_values)
 
     def onApplyLastPattern(self):
@@ -611,7 +611,20 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         print("Setting Zernike modes")
         self.nollZernike = nollZernike
 
-        self.actuator_offset = None
+        #Leave this line uncommented if you want to start from mirror flat
+        #self.actuator_offset = None
+        
+        #Leave this line uncommented if you want to start from system flat (Desktop values)
+        #self.actuator_offset = self.sys_flat_values
+        
+        #Leave this line uncommented if you want tpo start from the last applied mirror position
+        #self.actuator_offset = self.proxy.get_last_actuator_values()
+        
+        #Leave this line uncommented if you want to start with some aberration applied
+        set_zernike = np.zeros(self.no_actuators)
+        #apply -1 amplitude of first order spherical aberration
+        set_zernike[12] = -1
+        self.actuator_offset = self.proxy.set_phase(set_zernike)
 
         self.sensorless_correct_coef = np.zeros(self.no_actuators)
 
@@ -626,9 +639,17 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
 
         # Initialise the Zernike modes to apply
         print("Initialising the Zernike modes to apply")
-        self.numMes = 9
-        num_it = 2
-        self.z_steps = np.linspace(-0.3, 0.3, self.numMes)
+        self.numMes = 7
+        num_it = 1
+        self.z_steps = np.linspace(-1.5, 1.5, self.numMes)
+        
+        # Initialise the Zernike modes to apply. This version scans min to max, 
+        # then back from max to min
+        #no_steps = 5
+        #num_it = 1
+        #z_steps_min_to_max = np.linspace(-1.5, 1.5, no_steps)
+        #self.z_steps = np.concatenate((z_steps_min_to_max,z_steps_min_to_max[::-1]))
+        #self.numMes = self.z_steps.shape[0]
 
         for ii in range(num_it):
             it_zernike_applied = np.zeros((self.numMes * self.nollZernike.shape[0], self.no_actuators))

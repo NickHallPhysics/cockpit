@@ -494,6 +494,12 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
             except:
                 raise e
         assay = self.proxy.assess_character()
+
+        if np.mean(np.diag(assay)) < 0:
+            self.controlMatrix = -1 * self.proxy.get_controlMatrix()
+            self.proxy.set_controlMatrix(self.controlMatrix)
+            assay = -1 * assay
+
         file_path = os.path.join(os.path.expandvars('%LocalAppData%'),
                                  'cockpit', 'characterisation_assay')
         np.save(file_path, assay)

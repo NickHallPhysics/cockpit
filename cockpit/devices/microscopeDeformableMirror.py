@@ -50,6 +50,13 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         self.actuator_slopes = np.zeros(self.no_actuators)
         self.actuator_intercepts = np.zeros(self.no_actuators)
 
+        # Need intial values for sensorless AO
+        self.numMes = 7
+        self.num_it = 1
+        self.z_max = 0.03
+        self.z_min = -0.03
+        self.nollZernike = np.asarray([13, 24, 3, 5, 7, 8, 6, 9])
+
         # Excercise the DM to remove residual static and then set to 0 position
         for ii in range(50):
             self.proxy.send(np.random.rand(self.no_actuators))
@@ -101,13 +108,35 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
                       ('Contrast metric', 'contrast'),
                       ('Fourier Power metric', 'fourier_power'),
                       ('Gradient metric', 'gradient'),
-                      ('Second Moment metric', 'second_moment'),)
+                      ('Second Moment metric', 'second_moment'),
+                      ('Set Sensorless Parameters', self.set_sensorless_param),)
         # Store as ordered dict for easy item->func lookup.
         self.menuItems = OrderedDict(menuTuples)
 
     ### Context menu and handlers ###
     def menuCallback(self, index, item):
-        return self.proxy.set_metric(self.menuItems[item])
+        try:
+            self.menuItems[item]()
+        except TypeError:
+            return self.proxy.set_metric(self.menuItems[item])
+
+    def set_sensorless_param(self):
+        inputs = cockpit.gui.dialogs.getNumberDialog.getManyNumbersFromUser(
+                None,
+                'Set the parameters for Sensorless Adaptive Optics routine',
+                ['Aberration range minima',
+                 'Aberration range maxima',
+                 'Number of measurements',
+                 'Number of repeats',
+                 'Noll indeces'],
+                 (self.z_min, self.z_max, self.numMes, self.num_it, self.nollZernike.tolist()))
+        self.z_min, self.z_max, self.numMes, self.num_it = [i for i in inputs[:-1]]
+        self.z_min = float(self.z_min)
+        self.z_max = float(self.z_max)
+        self.numMes = int(self.numMes)
+        self.num_it = int(self.num_it)
+        self.nollZernike = np.asarray([int(z_ind) for z_ind in inputs[-1][1:-1].split(', ')])
+
 
     def onRightMouse(self, event):
         menu = cockpit.gui.device.Menu(self.menuItems.keys(), self.menuCallback)
@@ -594,7 +623,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
                                 id=i + 1)
             cockpit.gui.guiUtils.placeMenuAtMouse(self.panel, menu)
 
-    def correctSensorlessSetup(self, camera, nollZernike=np.array([13, 24, 3, 5, 7, 8, 6, 9])):
+    def correctSensorlessSetup(self, camera):
         print("Performing sensorless AO setup")
         # Note: Default is to correct Primary and Secondary Spherical aberration and both
         # orientations of coma, astigmatism and trefoil
@@ -609,7 +638,6 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
                 raise e
 
         print("Setting Zernike modes")
-        self.nollZernike = nollZernike
 
         #Leave this line uncommented if you want to start from mirror flat
         #self.actuator_offset = None
@@ -651,7 +679,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         #self.z_steps = np.concatenate((z_steps_min_to_max,z_steps_min_to_max[::-1]))
         #self.numMes = self.z_steps.shape[0]
 
-        for ii in range(num_it):
+        for ii in range(self.num_it):
             it_zernike_applied = np.zeros((self.numMes * self.nollZernike.shape[0], self.no_actuators))
             for noll_ind in self.nollZernike:
                 ind = np.where(self.nollZernike == noll_ind)[0][0]

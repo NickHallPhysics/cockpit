@@ -594,7 +594,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
                                 id=i + 1)
             cockpit.gui.guiUtils.placeMenuAtMouse(self.panel, menu)
 
-    def correctSensorlessSetup(self, camera, nollZernike=np.array([13, 24, 3, 5, 7, 8, 6, 9])):
+    def correctSensorlessSetup(self, camera, nollZernike=np.array([3, 5, 13])):#13, 24, 3, 5, 7, 8, 6, 9])):
         print("Performing sensorless AO setup")
         # Note: Default is to correct Primary and Secondary Spherical aberration and both
         # orientations of coma, astigmatism and trefoil
@@ -621,10 +621,11 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         #self.actuator_offset = self.proxy.get_last_actuator_values()
         
         #Leave this line uncommented if you want to start with some aberration applied
+        #Apply 0.02 amplitude of first order spherical aberration
         set_zernike = np.zeros(self.no_actuators)
-        #apply -1 amplitude of first order spherical aberration
-        set_zernike[12] = -1
-        self.actuator_offset = self.proxy.set_phase(set_zernike)
+        set_zernike[3] = -0.03
+        self.sys_flat_values = np.loadtxt("C:\\Users\\2Photon\\Desktop\\Voltages.txt")
+        self.actuator_offset = self.proxy.set_phase(set_zernike,offset=self.sys_flat_values)
 
         self.sensorless_correct_coef = np.zeros(self.no_actuators)
 
@@ -638,18 +639,19 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         self.pixelSize = self.objectives.getPixelSize()
 
         # Initialise the Zernike modes to apply
-        print("Initialising the Zernike modes to apply")
-        self.numMes = 7
-        num_it = 1
-        self.z_steps = np.linspace(-1.5, 1.5, self.numMes)
+        #print("Initialising the Zernike modes to apply")
+        #self.numMes = 7
+        #num_it = 1
+        #self.z_steps = np.linspace(-0.05, 0.05, self.numMes)
         
         # Initialise the Zernike modes to apply. This version scans min to max, 
         # then back from max to min
-        #no_steps = 5
-        #num_it = 1
-        #z_steps_min_to_max = np.linspace(-1.5, 1.5, no_steps)
-        #self.z_steps = np.concatenate((z_steps_min_to_max,z_steps_min_to_max[::-1]))
-        #self.numMes = self.z_steps.shape[0]
+        print("Initialising the Zernike modes to apply")
+        no_steps = 5
+        num_it = 1
+        z_steps_min_to_max = np.linspace(-0.035, 0.035, no_steps)
+        self.z_steps = np.concatenate((z_steps_min_to_max,z_steps_min_to_max[::-1]))
+        self.numMes = self.z_steps.shape[0]
 
         for ii in range(num_it):
             it_zernike_applied = np.zeros((self.numMes * self.nollZernike.shape[0], self.no_actuators))

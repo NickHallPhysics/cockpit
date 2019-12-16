@@ -96,6 +96,11 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
             self.proxy.set_controlMatrix(self.controlMatrix)
         except:
             pass
+            
+        try:
+            self.sys_flat_values = np.loadtxt("C:\\Users\\2Photon\\Desktop\\Voltages.txt")
+        except:
+            pass
 
         # subscribe to enable camera event to get access the new image queue
         events.subscribe('camera enable',
@@ -643,17 +648,17 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         #self.actuator_offset = None
         
         #Leave this line uncommented if you want to start from system flat (Desktop values)
-        #self.actuator_offset = self.sys_flat_values
+        self.actuator_offset = self.sys_flat_values
         
         #Leave this line uncommented if you want tpo start from the last applied mirror position
         #self.actuator_offset = self.proxy.get_last_actuator_values()
         
         #Leave this line uncommented if you want to start with some aberration applied
         #Apply 0.02 amplitude of first order spherical aberration
-        set_zernike = np.zeros(self.no_actuators)
-        set_zernike[3] = -0.03
-        self.sys_flat_values = np.loadtxt("C:\\Users\\2Photon\\Desktop\\Voltages.txt")
-        self.actuator_offset = self.proxy.set_phase(set_zernike,offset=self.sys_flat_values)
+        #set_zernike = np.zeros(self.no_actuators)
+        #set_zernike[3] = -0.03
+        #self.sys_flat_values = np.loadtxt("C:\\Users\\2Photon\\Desktop\\Voltages.txt")
+        #self.actuator_offset = self.proxy.set_phase(set_zernike,offset=self.sys_flat_values)
 
         self.sensorless_correct_coef = np.zeros(self.no_actuators)
 

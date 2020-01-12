@@ -679,14 +679,38 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         self.proxy.set_phase(self.zernike_applied[len(self.correction_stack), :], offset=self.actuator_offset)
 
         # Take image. This will trigger the iterative sensorless AO correction
+        self.previous_image_quality = 0
+        self.quality_checked = False
         wx.CallAfter(self.takeImage)
 
     def correctSensorlessImage(self, image, timestamp):
         if len(self.correction_stack) < self.zernike_applied.shape[0]:
-            print("Correction image %i/%i" % (len(self.correction_stack) + 1, self.zernike_applied.shape[0]))
-            # Store image for current applied phase
-            self.correction_stack.append(np.ndarray.tolist(image))
-            wx.CallAfter(self.correctSensorlessProcessing)
+            if self.quality_checked:
+                print("Correction image %i/%i" % (len(self.correction_stack) + 1, self.zernike_applied.shape[0]))
+                # Store image for current applied phase
+                self.correction_stack.append(np.ndarray.tolist(image))
+                wx.CallAfter(self.correctSensorlessProcessing)
+            else:
+                image_quality = self.proxy.measure_metric(image)
+                if image_quality < self.previous_image_quality:
+                    print("Image quality lower with 'correction'. Removing applied correction")
+                    nollInd = np.where(self.zernike_applied[np.max(len(self.correction_stack), 1) - 1, :] != 0)[0][0] + 1
+
+                    self.sensorless_correct_coef[nollInd - 1] = 0
+                    self.actuator_offset = self.proxy.set_phase(self.sensorless_correct_coef)
+                    print("Aberrations measured: ", self.sensorless_correct_coef)
+                    print("Actuator positions applied: ", self.actuator_offset)
+                else:
+                    self.previous_image_quality = image_quality
+
+                self.quality_checked = True
+
+                # Advance counter by 1 and apply next phase
+                self.proxy.set_phase(self.zernike_applied[len(self.correction_stack), :],
+                                     offset=self.actuator_offset)
+
+                # Take image, but ensure it's called after the phase is applied
+                wx.CallAfter(self.takeImage)
         else:
             print("Error in unsubscribing to camera events. Trying again")
             events.unsubscribe("new image %s" % self.camera.name, self.correctSensorlessImage)
@@ -710,7 +734,8 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
                 print("Actuator positions applied: ", self.actuator_offset)
 
                 # Advance counter by 1 and apply next phase
-                self.proxy.set_phase(self.zernike_applied[len(self.correction_stack), :], offset=self.actuator_offset)
+                #self.proxy.set_phase(self.zernike_applied[len(self.correction_stack), :], offset=self.actuator_offset)
+                self.quality_checked = False
 
                 # Take image, but ensure it's called after the phase is applied
                 wx.CallAfter(self.takeImage)

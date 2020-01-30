@@ -23,6 +23,24 @@
 
    Supports devices that implement the interface defined in
    microscope.devices
+
+For a direct connection::
+
+    [device]
+    type: cockpit.devices.a_module.SomeClass
+    uri: PYRO:SomeDevice@host.port
+
+For connection via a controller::
+
+    [device]
+    type: cockpit.devices.a_module.SomeClass
+    controller: some_controller
+    controller.name: remote_device    # optional
+
+    [some_controller]
+    type: cockpit.devices.another_module.AnotherClass
+    uri: PYRO:SomeControler@host.port
+
 """
 import Pyro4
 import wx
@@ -50,15 +68,43 @@ class MicroscopeBase(device.Device):
         self.handlers = []
         self.panel = None
         # Pyro proxy
-        self._proxy = Pyro4.Proxy(config.get('uri'))
+        self._proxy = None
         self.settings = {}
         self.cached_settings={}
         self.settings_editor = None
         self.defaults = DEFAULTS_NONE
         self.enabled = True
+        # Placeholders for methods deferred to proxy.
+        self.get_all_settings = None
+        self.get_setting = None
+        self.set_setting = None
+        self.describe_setting = None
+        self.describe_settings = None
+
+    def initialize(self):
+        super().initialize()
+        # Connect to the proxy.
+        if 'controller' not in self.config:
+            self._proxy = Pyro4.Proxy(self.uri)
+        else:
+            c = depot.getDeviceWithName(self.config['controller'])
+            c_name = self.config.get('controller.name', None)
+            if c_name is not None:
+                try:
+                    self._proxy = c._proxy.devices[c_name]
+                except:
+                    raise Exception("%s: device not found on controller '%s'." % (self.name, c.name))
+            elif len(c._proxy.devices) == 0:
+                raise Exception("%s: no devices found on controller." % self.name)
+            elif len(c._proxy.devices) == 1:
+                    self._proxy = next(iter(c._proxy.devices.values()))
+            else:
+                 raise Exception("%s: More than one device found on controller, "\
+                                 "so must specify controller.name." % self.name)
         self.get_all_settings = self._proxy.get_all_settings
         self.get_setting = self._proxy.get_setting
         self.set_setting = self._proxy.set_setting
+        self.describe_setting = self._proxy.describe_setting
         self.describe_settings = self._proxy.describe_settings
 
     def finalizeInitialization(self):
@@ -69,9 +115,10 @@ class MicroscopeBase(device.Device):
         # interface relies on us to send it valid data, so we have to
         # convert our strings to the appropriate type here.
         ss = self.config.get('settings')
+        settings = {}
         if ss:
-            settings = dict([m.groups() for kv in ss.split('\n')
-                             for m in [re.match(r'(.*)\s*[:=]\s*(.*)', kv)] if m])
+            settings.update(([m.groups() for kv in ss.split('\n')
+                             for m in [re.match(r'(.*)\s*[:=]\s*(.*)', kv)] if m]))
         for k,v in settings.items():
             try:
                 desc = self.describe_setting(k)

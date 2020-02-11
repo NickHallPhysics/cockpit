@@ -770,7 +770,7 @@ class ViewCanvas(wx.glcanvas.GLCanvas):
                 ('Set histogram parameters', self.onSetHistogram),
                 ('Toggle alignment crosshair', self.toggleCrosshair),
                 ('Toggle show aligment centroid', self.toggleAligCentroid),
-                ('Toggle show current centroid', self.toggleCurCentroid)]
+                ('Toggle show current centroid', self.toggleCurCentroid),
                 (self.menuStrFFT, self.toggleFFT),
                 ('Toggle clip highlighting', self.image.toggleClipHighlight),]
 

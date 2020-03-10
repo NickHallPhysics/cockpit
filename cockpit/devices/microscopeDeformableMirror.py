@@ -51,11 +51,11 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         self.actuator_intercepts = np.zeros(self.no_actuators)
 
         # Need intial values for sensorless AO
-        self.numMes = 7
+        self.noSteps = 5
         self.num_it = 1
-        self.z_max = 0.03
-        self.z_min = -0.03
-        self.nollZernike = np.asarray([3, 5, 13])#[13, 24, 3, 5, 7, 8, 6, 9])
+        self.z_max = 0.06
+        self.z_min = -0.06
+        self.nollZernike = np.asarray([12, 3, 5, 7, 8])#, 6, 9])
 
         # Excercise the DM to remove residual static and then set to 0 position
         for ii in range(50):
@@ -134,11 +134,11 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
                  'Number of measurements',
                  'Number of repeats',
                  'Noll indeces'],
-                 (self.z_min, self.z_max, self.numMes, self.num_it, self.nollZernike.tolist()))
-        self.z_min, self.z_max, self.numMes, self.num_it = [i for i in inputs[:-1]]
+                 (self.z_min, self.z_max, self.noSteps, self.num_it, self.nollZernike.tolist()))
+        self.z_min, self.z_max, self.noSteps, self.num_it = [i for i in inputs[:-1]]
         self.z_min = float(self.z_min)
         self.z_max = float(self.z_max)
-        self.numMes = int(self.numMes)
+        self.noSteps = int(self.noSteps)
         self.num_it = int(self.num_it)
         self.nollZernike = np.asarray([int(z_ind) for z_ind in inputs[-1][1:-1].split(', ')])
 
@@ -673,16 +673,12 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
 
         # Initialise the Zernike modes to apply
         #print("Initialising the Zernike modes to apply")
-        #self.numMes = 7
-        #num_it = 1
-        #self.z_steps = np.linspace(-0.05, 0.05, self.numMes)
+        #self.z_steps = np.linspace(self.z_min, self.z_max, self.noSteps)
         
         # Initialise the Zernike modes to apply. This version scans min to max, 
         # then back from max to min
         print("Initialising the Zernike modes to apply")
-        no_steps = 5
-        num_it = 1
-        z_steps_min_to_max = np.linspace(-0.035, 0.035, no_steps)
+        z_steps_min_to_max = np.linspace(self.z_min, self.z_max, self.noSteps)
         self.z_steps = np.concatenate((z_steps_min_to_max,z_steps_min_to_max[::-1]))
         self.numMes = self.z_steps.shape[0]
 
@@ -801,10 +797,10 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
                                                                 time.gmtime()[3], time.gmtime()[4]))
             np.save(sensorless_correct_coef_file_path, self.sensorless_correct_coef)
             ac_pos_sensorless_file_path = os.path.join(os.path.expandvars('%LocalAppData%'),
-                                                       'cockpit',
-                                                       'ac_pos_sensorless_%i%i%i_%i%i'
-                                                       % (time.gmtime()[2], time.gmtime()[1], time.gmtime()[0],
-                                                          time.gmtime()[3], time.gmtime()[4]))
+                                                        'cockpit',
+                                                        'ac_pos_sensorless_%i%i%i_%i%i'
+                                                        % (time.gmtime()[2], time.gmtime()[1], time.gmtime()[0],
+                                                        time.gmtime()[3], time.gmtime()[4]))
             np.save(ac_pos_sensorless_file_path, self.actuator_offset)
 
             log_file_path = os.path.join(os.path.expandvars('%LocalAppData%'),

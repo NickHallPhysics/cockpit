@@ -17,7 +17,7 @@ import cockpit.util
 import cockpit.interfaces.imager
 from itertools import groupby
 import cockpit.gui.device
-import cockpit.gui.toggleButton
+#import cockpit.gui.toggleButton
 import Pyro4
 import cockpit.util.userConfig as Config
 import cockpit.handlers.executor
@@ -46,7 +46,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
 
     def initialize(self):
         self.proxy = Pyro4.Proxy(self.uri)
-        self.proxy.set_trigger(cp_ttype="RISING_EDGE", cp_tmode="ONCE")
+        self.proxy.set_trigger(cp_ttype="SOFTWARE", cp_tmode="ONCE")
         self.no_actuators = self.proxy.get_n_actuators()
         self.actuator_slopes = np.zeros(self.no_actuators)
         self.actuator_intercepts = np.zeros(self.no_actuators)
@@ -902,7 +902,8 @@ class dmOutputWindow(wx.Frame):
         font = wx.Font(12, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD)
         mainSizer = wx.BoxSizer(wx.VERTICAL)
         allPositions = cockpit.interfaces.stageMover.getAllPositions()
-        self.piezoPos = allPositions[1][2]
+        #find the finest Z motion position
+        self.piezoPos = allPositions[-1][2]
         textSizer = wx.BoxSizer(wx.VERTICAL)
         self.piezoText = wx.StaticText(self.panel, -1, str(self.piezoPos),
                                        style=wx.ALIGN_CENTER)
@@ -917,4 +918,4 @@ class dmOutputWindow(wx.Frame):
             # We only care about the Z axis.
             return
         self.piezoText.SetLabel(
-            str(cockpit.interfaces.stageMover.getAllPositions()[1][2]))
+            str(cockpit.interfaces.stageMover.getAllPositions()[-1][2]))

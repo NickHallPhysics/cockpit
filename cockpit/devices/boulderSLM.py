@@ -243,7 +243,7 @@ class BoulderSLM(device.Device):
             if handler is not self.handler:
                 # Nothing to do
                 continue
-            elif action in [True, False]:
+            elif type(action) is bool:
                 # Trigger action generated on earlier pass through.
                 continue
             # Action specifies a target frame in the sequence.

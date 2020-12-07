@@ -100,7 +100,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
             pass
 
         try:
-            self.controlMatrix = Config.getValue('dm_controlMatrix')
+            self.controlMatrix = np.asarray(Config.getValue('dm_controlMatrix'))
             self.proxy.set_controlMatrix(self.controlMatrix)
         except:
             pass
@@ -552,7 +552,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
             self.proxy.get_controlMatrix()
         except Exception as e:
             try:
-                self.controlMatrix = Config.getValue('dm_controlMatrix')
+                self.controlMatrix = np.asarray(Config.getValue('dm_controlMatrix'))
                 self.proxy.set_controlMatrix(self.controlMatrix)
             except:
                 raise e
@@ -607,7 +607,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
             self.proxy.get_controlMatrix()
         except Exception as e:
             try:
-                self.controlMatrix = Config.getValue('dm_controlMatrix')
+                self.controlMatrix = np.asarray(Config.getValue('dm_controlMatrix'))
                 self.proxy.set_controlMatrix(self.controlMatrix)
             except:
                 raise e
@@ -730,7 +730,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
             self.proxy.get_controlMatrix()
         except Exception as e:
             try:
-                self.controlMatrix = Config.getValue('dm_controlMatrix')
+                self.controlMatrix = np.asarray(Config.getValue('dm_controlMatrix'))
                 self.proxy.set_controlMatrix(self.controlMatrix)
             except:
                 raise e

@@ -666,7 +666,7 @@ class Experiment:
             # out) some time after lastUseTime, depending on its declared
             # exposure time.
             nextUseTime += camera.getExposureTime(isExact = True)
-        nextUseTime += self.cameraToReadoutTime[camera] + decimal.Decimal(0.1)
+        nextUseTime += self.cameraToReadoutTime[camera] + decimal.Decimal(5.1)
         return nextUseTime
 
     ## Return a calculated exposure time for the specified camera handler,

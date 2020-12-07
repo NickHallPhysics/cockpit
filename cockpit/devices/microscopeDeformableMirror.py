@@ -29,6 +29,7 @@ import cockpit.util.phaseViewer as phaseViewer
 import cockpit.util.charAssayViewer as charAssayViewer
 import numpy as np
 import scipy.stats as stats
+import aotools
 
 
 # the AO device subclasses Device to provide compatibility with microscope.
@@ -49,6 +50,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         self.no_actuators = self.proxy.get_n_actuators()
         self.actuator_slopes = np.zeros(self.no_actuators)
         self.actuator_intercepts = np.zeros(self.no_actuators)
+        self.config_dir = wx.GetApp().Config['global'].get('config-dir')
 
         # Need intial values for sensorless AO
         self.noSteps = 5
@@ -56,6 +58,12 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         self.z_max = 0.06
         self.z_min = -0.06
         self.nollZernike = np.asarray([13, 3, 5, 7, 8])#, 6, 9]) #OSA index plus one should be written here
+
+        # Need initial values for system flat calculations
+        self.sys_flat_num_it = 10
+        self.sys_error_thresh = np.inf
+        self.sysFlatNollZernike = np.linspace(start=4,stop=68,num=65,dtype=int)
+        self.sys_flat_values = None
 
         # Excercise the DM to remove residual static and then set to 0 position
         for ii in range(50):
@@ -66,7 +74,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         # Create accurate look up table for certain Z positions
         # LUT dict has key of Z positions
         try:
-            file_path = os.path.join(os.path.expandvars('%LocalAppData%'), 'cockpit', 'remote_focus_LUT.txt')
+            file_path = os.path.join(self.config_dir, 'remote_focus_LUT.txt')
             LUT_array = np.loadtxt(file_path)
             self.LUT = {}
             for ii in (LUT_array[:, 0])[:]:
@@ -101,7 +109,6 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
             self.sys_flat_values = np.loadtxt("C:\\Users\\2Photon\\Desktop\\Voltages.txt")
         except:
             pass
-
         # subscribe to enable camera event to get access the new image queue
         events.subscribe('camera enable',
                          lambda c, isOn: self.enablecamera(c, isOn))
@@ -114,6 +121,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
                       ('Fourier Power metric', 'fourier_power'),
                       ('Gradient metric', 'gradient'),
                       ('Second Moment metric', 'second_moment'),
+                      ('Set System Flat Calculation Paramterers', self.set_sys_flat_param),
                       ('Set Sensorless Parameters', self.set_sensorless_param),)
         # Store as ordered dict for easy item->func lookup.
         self.menuItems = OrderedDict(menuTuples)
@@ -125,6 +133,24 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         except TypeError:
             return self.proxy.set_metric(self.menuItems[item])
 
+    def set_sys_flat_param(self):
+        inputs = cockpit.gui.dialogs.getNumberDialog.getManyNumbersFromUser(
+                None,
+                'Set the parameters for Sensorless Adaptive Optics routine',
+                ['Number of iterations',
+                 'Error threshold',
+                 'System Flat Noll indeces'],
+                 (self.sys_flat_num_it, self.sys_error_thresh, self.sysFlatNollZernike.tolist()))
+        self.sys_flat_num_it = int(inputs[0])
+        if inputs[1] == 'inf':
+            self.sys_error_thresh = np.inf
+        else:
+            self.sys_error_thresh = int(inputs[1])
+        if inputs[-1][1:-1].split(', ') == ['']:
+            self.sysFlatNollZernike = None
+        else:
+            self.sysFlatNollZernike = np.asarray([int(z_ind) for z_ind in inputs[-1][1:-1].split(', ')])
+
     def set_sensorless_param(self):
         inputs = cockpit.gui.dialogs.getNumberDialog.getManyNumbersFromUser(
                 None,
@@ -134,11 +160,11 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
                  'Number of measurements',
                  'Number of repeats',
                  'Noll indeces'],
-                 (self.z_min, self.z_max, self.noSteps, self.num_it, self.nollZernike.tolist()))
-        self.z_min, self.z_max, self.noSteps, self.num_it = [i for i in inputs[:-1]]
+                 (self.z_min, self.z_max, self.numMes, self.num_it, self.nollZernike.tolist()))
+        self.z_min, self.z_max, self.numMes, self.num_it = [i for i in inputs[:-1]]
         self.z_min = float(self.z_min)
         self.z_max = float(self.z_max)
-        self.noSteps = int(self.noSteps)
+        self.numMes = int(self.numMes)
         self.num_it = int(self.num_it)
         self.nollZernike = np.asarray([int(z_ind) for z_ind in inputs[-1][1:-1].split(', ')])
 
@@ -148,7 +174,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         menu.show(event)
 
     def takeImage(self):
-        cockpit.interfaces.imager.takeImage()
+        wx.GetApp().Imager.takeImage()
 
     def enablecamera(self, camera, isOn):
         self.curCamera = camera
@@ -326,7 +352,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
                     raise Exception("Argument Error: Argument type %s not understood." % str(type(args)))
 
         if len(self.remote_focus_LUT) != 0:
-            file_path = os.path.join(os.path.expandvars('%LocalAppData%'), 'cockpit', 'remote_focus_LUT.txt')
+            file_path = os.path.join(self.config_dir, 'remote_focus_LUT.txt')
             np.savetxt(file_path, np.asanyarray(self.remote_focus_LUT))
             Config.setValue('dm_remote_focus_LUT', self.remote_focus_LUT)
 
@@ -341,10 +367,15 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         rowSizer = wx.BoxSizer(wx.VERTICAL)
         self.elements = OrderedDict()
 
-        # Button to calibrate the DM
+        # Button to select the interferometer ROI
         selectCircleButton = wx.Button(self.panel, label='Select ROI')
         selectCircleButton.Bind(wx.EVT_BUTTON, self.onSelectCircle)
         self.elements['selectCircleButton'] = selectCircleButton
+
+        # Visualise current interferometric phase
+        visPhaseButton = wx.Button(self.panel, label='Visualise Phase')
+        visPhaseButton.Bind(wx.EVT_BUTTON, lambda evt: self.onVisualisePhase())
+        self.elements['visPhaseButton'] = visPhaseButton
 
         # Button to calibrate the DM
         calibrateButton = wx.Button(self.panel, label='Calibrate')
@@ -354,6 +385,10 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         characteriseButton = wx.Button(self.panel, label='Characterise')
         characteriseButton.Bind(wx.EVT_BUTTON, lambda evt: self.onCharacterise())
         self.elements['characteriseButton'] = characteriseButton
+
+        sysFlatCalcButton = wx.Button(self.panel, label='Calculate System Flat')
+        sysFlatCalcButton.Bind(wx.EVT_BUTTON, lambda evt: self.onSysFlatCalc())
+        self.elements['sysFlatCalcButton'] = sysFlatCalcButton
 
         label_use = cockpit.gui.device.Label(
             parent=self.panel, label='AO use')
@@ -369,11 +404,6 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         applySysFlat.Bind(wx.EVT_BUTTON, lambda evt: self.onApplySysFlat())
         self.elements['applySysFlat'] = applySysFlat
 
-        # Visualise current interferometric phase
-        visPhaseButton = wx.Button(self.panel, label='Visualise Phase')
-        visPhaseButton.Bind(wx.EVT_BUTTON, lambda evt: self.onVisualisePhase())
-        self.elements['visPhaseButton'] = visPhaseButton
-
         # Apply last actuator values
         applyLastPatternButton = wx.Button(self.panel, label='Apply last pattern')
         applyLastPatternButton.Bind(wx.EVT_BUTTON, lambda evt: self.onApplyLastPattern())
@@ -383,6 +413,8 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         sensorlessAOButton = wx.Button(self.panel, label='Sensorless AO')
         sensorlessAOButton.Bind(wx.EVT_BUTTON, lambda evt: self.displaySensorlessAOMenu())
         self.elements['Sensorless AO'] = sensorlessAOButton
+
+        self.panel.Bind(wx.EVT_CONTEXT_MENU, self.onRightMouse)
 
         for e in self.elements.values():
             rowSizer.Add(e, 0, wx.EXPAND)
@@ -460,10 +492,9 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
             print("Detecting nothing but background noise")
 
     def createCanvas(self, temp, scale_factor):
-        app = wx.App()
         temp = np.require(temp, requirements='C')
         frame = selectCircle.ROISelect(input_image=temp, scale_factor=scale_factor)
-        app.MainLoop()
+        frame.Show()
 
     def onCalibrate(self):
         self.parameters = Config.getValue('dm_circleParams')
@@ -485,13 +516,15 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         except Exception as e:
             try:
                 test_image = self.proxy.acquire()
-                self.proxy.set_fourierfilter(test_image=test_image)
+                self.proxy.set_fourierfilter(test_image=test_image, window_dim=50,
+                                             mask_di=int((2 * self.parameters[2]) * (3.0 / 16.0)))
             except:
                 raise e
 
-        controlMatrix, sys_flat = self.proxy.calibrate(numPokeSteps=5)
+        controlMatrix = self.proxy.calibrate(numPokeSteps=5)
         Config.setValue('dm_controlMatrix', np.ndarray.tolist(controlMatrix))
-        Config.setValue('dm_sys_flat', np.ndarray.tolist(sys_flat))
+        contol_matrix_file_path = os.path.join(self.config_dir, 'control_matrix.txt')
+        np.savetxt(contol_matrix_file_path, controlMatrix)
 
     def onCharacterise(self):
         self.parameters = Config.getValue('dm_circleParams')
@@ -513,7 +546,8 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         except Exception as e:
             try:
                 test_image = self.proxy.acquire()
-                self.proxy.set_fourierfilter(test_image=test_image)
+                self.proxy.set_fourierfilter(test_image=test_image, window_dim=50,
+                                             mask_di=int((2 * self.parameters[2]) * (3.0 / 16.0)))
             except:
                 raise e
 
@@ -526,14 +560,72 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
             except:
                 raise e
         assay = self.proxy.assess_character()
-        file_path = os.path.join(os.path.expandvars('%LocalAppData%'),
-                                 'cockpit', 'characterisation_assay')
+
+        if np.mean(assay[1:, 1:]) < 0:
+            cm = self.proxy.get_controlMatrix()
+            self.proxy.set_controlMatrix((-1*cm))
+            assay = assay * -1
+            Config.setValue('dm_controlMatrix', np.ndarray.tolist(cm))
+            contol_matrix_file_path = os.path.join(self.config_dir, 'control_matrix.txt')
+            np.savetxt(contol_matrix_file_path, cm)
+
+        file_path = os.path.join(self.config_dir, 'characterisation_assay')
         np.save(file_path, assay)
+        # The default system corrections should be for the zernike modes we can accurately recreate
+        self.sysFlatNollZernike = (np.where(np.diag(assay) > 0.75)[0]) + 1
 
         # Show characterisation assay, excluding piston
-        app = wx.App()
         frame = charAssayViewer.viewCharAssay(assay[1:, 1:])
-        app.MainLoop()
+        frame.Show()
+
+    def onSysFlatCalc(self):
+        self.parameters = Config.getValue('dm_circleParams')
+        self.proxy.set_roi(self.parameters[0], self.parameters[1],
+                           self.parameters[2])
+
+        # Check we have the interferogram ROI
+        try:
+            self.proxy.get_roi()
+        except Exception as e:
+            try:
+                param = np.asarray(Config.getValue('dm_circleParams'))
+                self.proxy.set_roi(y0=param[0], x0=param[1],
+                                   radius=param[2])
+            except:
+                raise e
+
+        # Check we have a Fourier filter
+        try:
+            self.proxy.get_fourierfilter()
+        except:
+            try:
+                test_image = self.proxy.acquire()
+                self.proxy.set_fourierfilter(test_image=test_image, window_dim=50,
+                                             mask_di=int((2 * self.parameters[2]) * (3.0 / 16.0)))
+            except Exception as e:
+                raise e
+
+        # Check the DM has been calibrated
+        try:
+            self.proxy.get_controlMatrix()
+        except Exception as e:
+            try:
+                self.controlMatrix = Config.getValue('dm_controlMatrix')
+                self.proxy.set_controlMatrix(self.controlMatrix)
+            except:
+                raise e
+
+        z_ignore = np.zeros(self.no_actuators)
+        if self.sysFlatNollZernike is not None:
+            z_ignore[self.sysFlatNollZernike-1] = 1
+        self.sys_flat_values, best_z_amps_corrected = self.proxy.flatten_phase(
+                                                        iterations=self.sys_flat_num_it,
+                                                        error_thresh=self.sys_error_thresh,
+                                                        z_modes_ignore = z_ignore)
+
+        Config.setValue('dm_sys_flat', np.ndarray.tolist(self.sys_flat_values))
+        print("Zernike modes amplitudes corrected:\n", best_z_amps_corrected)
+        print("System flat actuator values:\n", self.sys_flat_values)
 
     def onVisualisePhase(self):
         self.parameters = Config.getValue('dm_circleParams')
@@ -555,30 +647,32 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         except:
             try:
                 test_image = self.proxy.acquire()
-                self.proxy.set_fourierfilter(test_image=test_image)
+                self.proxy.set_fourierfilter(test_image=test_image, window_dim=50,
+                                             mask_di= int((2*self.parameters[2]) * (3.0 / 16.0)))
             except Exception as e:
                 raise e
 
         interferogram, unwrapped_phase = self.proxy.acquire_unwrapped_phase()
-        interferogram_file_path = os.path.join(os.path.expandvars('%LocalAppData%'),
-                                               'cockpit', 'interferogram')
+        z_amps = self.proxy.getzernikemodes(unwrapped_phase, 3)
+        unwrapped_phase_mptt = unwrapped_phase - aotools.phaseFromZernikes(z_amps[0:3],
+                                                                           unwrapped_phase.shape[0])
+        unwrapped_RMS_error = self.proxy.wavefront_rms_error(unwrapped_phase_mptt)
+
+        interferogram_file_path = os.path.join(self.config_dir, 'interferogram')
         np.save(interferogram_file_path, interferogram)
 
         interferogram_ft = np.fft.fftshift(np.fft.fft2(interferogram))
-        interferogram_ft_file_path = os.path.join(os.path.expandvars('%LocalAppData%'),
-                                                  'cockpit', 'interferogram_ft')
+        interferogram_ft_file_path = os.path.join(self.config_dir, 'interferogram_ft')
         np.save(interferogram_ft_file_path, interferogram_ft)
 
-        unwrapped_phase_file_path = os.path.join(os.path.expandvars('%LocalAppData%'),
-                                                 'cockpit', 'unwrapped_phase')
+        unwrapped_phase_file_path = os.path.join(self.config_dir, 'unwrapped_phase')
         np.save(unwrapped_phase_file_path, unwrapped_phase)
 
         unwrapped_phase = np.require(unwrapped_phase, requirements='C')
         power_spectrum = np.require(np.log(abs(interferogram_ft)), requirements='C')
 
-        app = wx.App()
-        frame = phaseViewer.viewPhase(unwrapped_phase, power_spectrum)
-        app.MainLoop()
+        frame = phaseViewer.viewPhase(unwrapped_phase, power_spectrum, unwrapped_RMS_error)
+        frame.Show()
 
     def onApplySysFlat(self):
         self.sys_flat_values = np.loadtxt("C:\\Users\\2Photon\\Desktop\\Voltages.txt")
@@ -665,22 +759,15 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         print("Subscribing to camera events")
         # Subscribe to camera events
         self.camera = camera
-        events.subscribe("new image %s" % self.camera.name, self.correctSensorlessImage)
+        events.subscribe(events.NEW_IMAGE % self.camera.name, self.correctSensorlessImage)
 
         # Get pixel size
-        self.objectives = cockpit.depot.getHandlersOfType(cockpit.depot.OBJECTIVE)[0]
-        self.pixelSize = self.objectives.getPixelSize()
+        self.objectives = wx.GetApp().Objectives.GetCurrent().lens_ID
+        self.pixelSize = wx.GetApp().Objectives.GetPixelSize() * 10 ** -6
 
         # Initialise the Zernike modes to apply
-        #print("Initialising the Zernike modes to apply")
-        #self.z_steps = np.linspace(self.z_min, self.z_max, self.noSteps)
-        
-        # Initialise the Zernike modes to apply. This version scans min to max, 
-        # then back from max to min
         print("Initialising the Zernike modes to apply")
-        z_steps_min_to_max = np.linspace(self.z_min, self.z_max, self.noSteps)
-        self.z_steps = np.concatenate((z_steps_min_to_max,z_steps_min_to_max[::-1]))
-        self.numMes = self.z_steps.shape[0]
+        self.z_steps = np.linspace(self.z_min, self.z_max, self.numMes)
 
         for ii in range(self.num_it):
             it_zernike_applied = np.zeros((self.numMes * self.nollZernike.shape[0], self.no_actuators))
@@ -713,7 +800,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
             wx.CallAfter(self.correctSensorlessProcessing)
         else:
             print("Error in unsubscribing to camera events. Trying again")
-            events.unsubscribe("new image %s" % self.camera.name, self.correctSensorlessImage)
+            events.unsubscribe(events.NEW_IMAGE % self.camera.name, self.correctSensorlessImage)
 
     def correctSensorlessProcessing(self):
         print("Processing sensorless image")
@@ -728,9 +815,9 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
                                                                                               zernike_applied=self.z_steps,
                                                                                               nollIndex=nollInd,
                                                                                               offset=self.actuator_offset,
-                                                                                              wavelength=550*10**-9,
-                                                                                              NA=1.4,
-                                                                                              pixel_size=((6.5*10**-6)/40))
+                                                                                              wavelength = 500 * 10 ** -9,
+                                                                                              NA = 1.42,
+                                                                                              pixel_size = self.pixelSize)
                 self.actuator_offset = ac_pos_correcting
                 self.sensorless_correct_coef[nollInd - 1] += amp_to_correct
                 print("Aberrations measured: ", self.sensorless_correct_coef)
@@ -751,24 +838,21 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         else:
             # Once all images have been obtained, unsubscribe
             print("Unsubscribing to camera %s events" % self.camera.name)
-            events.unsubscribe("new image %s" % self.camera.name, self.correctSensorlessImage)
+            events.unsubscribe(events.NEW_IMAGE % self.camera.name, self.correctSensorlessImage)
 
             # Save full stack of images used
             self.correction_stack = np.asarray(self.correction_stack)
-            correction_stack_file_path = os.path.join(os.path.expandvars('%LocalAppData%'),
-                                                      'cockpit',
+            correction_stack_file_path = os.path.join(self.config_dir,
                                                       'sensorless_AO_correction_stack_%i%i%i_%i%i'
                                                       % (time.gmtime()[2], time.gmtime()[1], time.gmtime()[0],
                                                          time.gmtime()[3], time.gmtime()[4]))
             np.save(correction_stack_file_path, self.correction_stack)
-            zernike_applied_file_path = os.path.join(os.path.expandvars('%LocalAppData%'),
-                                                     'cockpit',
+            zernike_applied_file_path = os.path.join(self.config_dir,
                                                      'sensorless_AO_zernike_applied_%i%i%i_%i%i'
                                                      % (time.gmtime()[2], time.gmtime()[1], time.gmtime()[0],
                                                         time.gmtime()[3], time.gmtime()[4]))
             np.save(zernike_applied_file_path, self.zernike_applied)
-            nollZernike_file_path = os.path.join(os.path.expandvars('%LocalAppData%'),
-                                                 'cockpit',
+            nollZernike_file_path = os.path.join(self.config_dir,
                                                  'sensorless_AO_nollZernike_%i%i%i_%i%i'
                                                  % (time.gmtime()[2], time.gmtime()[1], time.gmtime()[0],
                                                     time.gmtime()[3], time.gmtime()[4]))
@@ -783,28 +867,27 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
                                                                                           zernike_applied=self.z_steps,
                                                                                           nollIndex=nollInd,
                                                                                           offset=self.actuator_offset,
-                                                                                          wavelength=550*10**-9,
-                                                                                          NA=1.4,
-                                                                                          pixel_size=((6.5*10**-6)/40))
+                                                                                          wavelength=500 * 10 ** -9,
+                                                                                          NA=1.42,
+                                                                                          pixel_size=self.pixelSize                                                                                          )
             self.actuator_offset = ac_pos_correcting
             self.sensorless_correct_coef[nollInd - 1] += amp_to_correct
             print("Aberrations measured: ", self.sensorless_correct_coef)
             print("Actuator positions applied: ", self.actuator_offset)
             sensorless_correct_coef_file_path = os.path.join(os.path.expandvars('%LocalAppData%'),
                                                              'cockpit',
+            sensorless_correct_coef_file_path = os.path.join(self.config_dir,
                                                              'sensorless_correct_coef_%i%i%i_%i%i'
                                                              % (time.gmtime()[2], time.gmtime()[1], time.gmtime()[0],
                                                                 time.gmtime()[3], time.gmtime()[4]))
             np.save(sensorless_correct_coef_file_path, self.sensorless_correct_coef)
-            ac_pos_sensorless_file_path = os.path.join(os.path.expandvars('%LocalAppData%'),
-                                                        'cockpit',
-                                                        'ac_pos_sensorless_%i%i%i_%i%i'
-                                                        % (time.gmtime()[2], time.gmtime()[1], time.gmtime()[0],
-                                                        time.gmtime()[3], time.gmtime()[4]))
+            ac_pos_sensorless_file_path = os.path.join(self.config_dir,
+                                                       'ac_pos_sensorless_%i%i%i_%i%i'
+                                                       % (time.gmtime()[2], time.gmtime()[1], time.gmtime()[0],
+                                                          time.gmtime()[3], time.gmtime()[4]))
             np.save(ac_pos_sensorless_file_path, self.actuator_offset)
 
-            log_file_path = os.path.join(os.path.expandvars('%LocalAppData%'),
-                                         'cockpit',
+            log_file_path = os.path.join(self.config_dir,
                                          'sensorless_AO_logger.txt')
             log_file = open(log_file_path, "a+")
             log_file.write("Time stamp: %i:%i:%i %i/%i/%i\n" % (
@@ -843,7 +926,7 @@ class dmOutputWindow(wx.Frame):
         textSizer.Add(self.piezoText, 0, wx.EXPAND | wx.ALL, border=5)
         mainSizer.Add(textSizer, 0, wx.EXPAND | wx.ALL, border=5)
         self.panel.SetSizerAndFit(mainSizer)
-        events.subscribe('stage position', self.onMove)
+        events.subscribe(events.STAGE_POSITION, self.onMove)
 
     def onMove(self, axis, *args):
         if axis != 2:

@@ -55,7 +55,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         self.num_it = 1
         self.z_max = 0.06
         self.z_min = -0.06
-        self.nollZernike = np.asarray([12, 3, 5, 7, 8])#, 6, 9])
+        self.nollZernike = np.asarray([13, 3, 5, 7, 8])#, 6, 9]) #OSA index plus one should be written here
 
         # Excercise the DM to remove residual static and then set to 0 position
         for ii in range(50):
@@ -521,7 +521,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
             self.proxy.get_controlMatrix()
         except Exception as e:
             try:
-                self.controlMatrix = np.loadtxt("C:\\Users\\2Photon\\Desktop\\Control.txt")
+                self.controlMatrix = np.loadtxt("C:\\Users\\2Photon\\Desktop\\Control1.txt")
                 self.proxy.set_controlMatrix(self.controlMatrix)
             except:
                 raise e

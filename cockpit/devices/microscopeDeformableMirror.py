@@ -53,11 +53,11 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         self.config_dir = wx.GetApp().Config['global'].get('config-dir')
 
         # Need intial values for sensorless AO
-        self.noSteps = 5
+        self.numMes = 5
         self.num_it = 1
         self.z_max = 0.06
         self.z_min = -0.06
-        self.nollZernike = np.asarray([13, 3, 5, 7, 8])#, 6, 9]) #OSA index plus one should be written here
+        self.nollZernike = np.asarray([13, 4, 6, 8, 9]) #OSA index plus one should be written here
 
         # Need initial values for system flat calculations
         self.sys_flat_num_it = 10
@@ -555,7 +555,7 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
             self.proxy.get_controlMatrix()
         except Exception as e:
             try:
-                self.controlMatrix = np.loadtxt("C:\\Users\\2Photon\\Desktop\\Control1.txt")
+                self.controlMatrix = np.loadtxt("C:\\Users\\2Photon\\Desktop\\Control.txt")
                 self.proxy.set_controlMatrix(self.controlMatrix)
             except:
                 raise e
@@ -743,6 +743,9 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
         
         #Leave this line uncommented if you want to start from system flat (Desktop values)
         self.actuator_offset = self.sys_flat_values
+        defocus_vector = np.zeroes(52)
+        defocus_vector[3] = 0
+        self.actuator_offset = self.proxy.set_phase(defocus_vector,offset=self.sys_flat_values)
         
         #Leave this line uncommented if you want tpo start from the last applied mirror position
         #self.actuator_offset = self.proxy.get_last_actuator_values()
@@ -874,8 +877,6 @@ class MicroscopeDeformableMirror(MicroscopeBase, device.Device):
             self.sensorless_correct_coef[nollInd - 1] += amp_to_correct
             print("Aberrations measured: ", self.sensorless_correct_coef)
             print("Actuator positions applied: ", self.actuator_offset)
-            sensorless_correct_coef_file_path = os.path.join(os.path.expandvars('%LocalAppData%'),
-                                                             'cockpit',
             sensorless_correct_coef_file_path = os.path.join(self.config_dir,
                                                              'sensorless_correct_coef_%i%i%i_%i%i'
                                                              % (time.gmtime()[2], time.gmtime()[1], time.gmtime()[0],
